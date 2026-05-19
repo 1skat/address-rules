@@ -1,0 +1,16 @@
+{
+  "name": "addressrules",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:test": "npm -w packages/backend run test",
+    "dev:be": "npm -w packages/backend run dev",
+    "dev:fe": "npm -w packages/frontend run dev"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "redis": "^5.12.1"
+  }
+}
