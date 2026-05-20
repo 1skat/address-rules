@@ -11,7 +11,7 @@ import cors from "cors"
 import { verifySignIn } from '@solana/wallet-standard-util';
 import { cfg } from "@/config.js"
 import { authenticate, isValidRT } from './middleware/authenticate.js';
-import { access } from 'fs';
+import cookieParser from "cookie-parser";
 
 const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -23,6 +23,7 @@ const WEB_TOKEN_CONFIG = {
 
 const app = express()
 app.use(express.json());
+app.use(cookieParser());
 app.disable("x-powered-by");
 app.use(cors({
     origin: "http://localhost:5173",
@@ -33,36 +34,34 @@ const nonceCache = new LRUCache<string, string>({
     max: 100,
     ttl: 5 * 60_000,
 });
-const sessionCache = new LRUCache<string, Object>({
+const sessionCache = new LRUCache<string, boolean>({
     max: 100,
     ttl: 2 * 60_000,
 });
 
 app.post("/account/logout", authenticate, async (req, res) => {
-    await redis.del(`validRT:${req.user.parent_id}`)
+    await redis.zRem(`user_sessions:${req.user.sub}`, req.user.parent_id);
     res.clearCookie("refreshToken", { path: "/account" });
 
-    return res.status(200).json("");
+    return res.status(200).send("OK");
 });
 
 app.post("/account/refresh-access-token", async (req, res) => {
     const oldRefreshToken = req.cookies.refreshToken;
     if (!oldRefreshToken) {
-        return res.status(401).json("");
+        return res.status(401).end();
     }
-
-    // clean up expiered tokens from zset
-    // const expirationTime = Date.now() - REFRESH_TOKEN_CONFIG.expMs;
-    // await redis.zRemRangeByScore(`user_sessions:${req.user.sub}`, 0, expirationTime);
 
     const payload = jwt.verify(oldRefreshToken, cfg.jwt.pubKey, { algorithms: ["ES256"] }) as { sub: string, jti: string };
-    if (!isValidRT(payload.sub, payload.jti)) {
-        return res.status(401).json("");
+    if (! await isValidRT(payload.sub, payload.jti)) {
+        return res.status(401).end();
     }
+
+    await redis.zRem(`user_sessions:${payload.sub}`, payload.jti);
 
     const newRtJTI = randomUUID();
     const accessToken = jwt.sign(
-        { sub: payload.sub, aud: "addressrules.xyz/access", father_id: newRtJTI, iss: "addressrules.xyz/signer" },
+        { sub: payload.sub, aud: "addressrules.xyz/access", parent_id: newRtJTI, iss: "addressrules.xyz/signer" },
         cfg.jwt.privKey,
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.accessExpStr }
     );
@@ -72,20 +71,21 @@ app.post("/account/refresh-access-token", async (req, res) => {
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.refreshExpStr }
     );
 
-    await redis.zAdd(`user_sessions:${payload.sub}`, { score: Date.now(), value: newRtJTI });
+    await redis.zAdd(`user_sessions:${payload.sub}`, { score: Date.now() + WEB_TOKEN_CONFIG.refreshExpMs /*expiery time*/, value: newRtJTI })
     await redis.zRemRangeByRank(`user_sessions:${payload.sub}`, 0, -5) // limit to 4 concurrent sessions per user
 
     res.cookie("refreshToken", newRefreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60_000, // 7 days
+        maxAge: WEB_TOKEN_CONFIG.refreshExpMs, // 7 days
         path: "/account"
     });
     return res.status(200).json({ accessToken });
 });
 
 app.post("/account/login-by-wallet/init", async (req, res) => {
+
     const { address, walletType, chain } = req.body; // zod
 
     const [_, invalid] = tryCatch(() => new PublicKey(address));
@@ -99,7 +99,7 @@ app.post("/account/login-by-wallet/init", async (req, res) => {
         nonceCache.set(`nonce:${address}`, nonce);
     };
     const sessionId = randomUUID();
-    sessionCache.set(`session:${sessionId}`, { nonce, address }); // create a session tied to the nonce
+    sessionCache.set(`session:${sessionId}`, true);
 
     return res.status(200).json({
         nonce,
@@ -126,6 +126,7 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
     }
 
     sessionCache.delete(`session:${sessionId}`);
+    nonceCache.delete(`nonce:${address}`);
 
     const [account] = await sql`
     WITH inserted AS (
@@ -143,52 +144,41 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 
     if (!account) return res.status(400).json("db failed");
 
-    const rtJTI = randomUUID(); // refresh token JTI 
-    // console.log(cfg.jwt)
-    // return
+    const rtJTI = randomUUID();
     const refreshToken = jwt.sign(
         { sub: account.id, aud: "addressrules.xyz/refresh", jti: rtJTI, iss: "addressrules.xyz/signer" },
         cfg.jwt.privKey,
-        { algorithm: "ES256", expiresIn: REFRESH_TOKEN_CONFIG.expDays }
+        { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.refreshExpStr }
     );
     const accessToken = jwt.sign(
         { sub: account.id, aud: "addressrules.xyz/access", parent_id: rtJTI, iss: "addressrules.xyz/signer" },
         cfg.jwt.privKey,
-        { algorithm: "ES256", expiresIn: "30m" }
+        { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.accessExpStr }
     );
 
-    await redis.zAdd(`user_sessions:${account.id}`, { score: Date.now(), value: rtJTI })
+    await redis.zAdd(`user_sessions:${account.id}`, { score: Date.now() + WEB_TOKEN_CONFIG.refreshExpMs /*expiery time*/, value: rtJTI })
     await redis.zRemRangeByRank(`user_sessions:${account.id}`, 0, -5) // limit to 4 concurrent sessions per user
-
-    // dont store refresh tokens in postgress anymore
-    // await sql`
-    // WITH _ AS (
-    //     INSERT INTO refresh_tokens (id, account_id, expires_at)
-    //     VALUES (${rtJTI}, ${account.id}, now() + interval '7 days' )
-    // )
-    // DELETE FROM refresh_tokes
-    // WHERE account_id = ${account.id}
-    // AND id NOT IN (
-    // SELECT id FROM refresh_tokens
-    // WHERE account_id = ${account.id}
-    // ORDER BY created_at DESC 
-    // LIMIT 3
-    // )`;
 
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60_000, // 7 days
+        maxAge: WEB_TOKEN_CONFIG.refreshExpMs, // 7 days
         path: "/account"
     });
 
     return res.status(200).json({ accessToken });
 });
 
-app.get("user-info", authenticate, async (req, res) => {
+app.use((err, req, res, next) => {
 
-})
+    res.status(500).json({
+        error: "Internal error: " + err.message // remove the err in prod
+    })
+});
+
 
 app.listen(3000);
 console.log("Express server is running on port 3000")
+
+
