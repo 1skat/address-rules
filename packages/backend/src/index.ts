@@ -13,12 +13,16 @@ import { cfg } from "@/config.js"
 import { authenticate, isValidRT } from './middleware/authenticate.js';
 import cookieParser from "cookie-parser";
 
-const WEB_TOKEN_CONFIG = {
+export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
     accessExpStr: "30m",
     refreshExpMs: 7 * 24 * 60 * 60 * 1000,
     refreshExpSec: 7 * 24 * 60 * 60,
     refreshExpStr: "7d",
+    baseClaim: {
+        iss: "addressrules.xyz/signer",
+        ver: 1
+    },
 };
 
 const app = express()
@@ -52,21 +56,24 @@ app.post("/account/refresh-access-token", async (req, res) => {
         return res.status(401).end();
     }
 
-    const payload = jwt.verify(oldRefreshToken, cfg.jwt.pubKey, { algorithms: ["ES256"] }) as { sub: string, jti: string };
+    const payload = jwt.verify(oldRefreshToken, cfg.jwt.pubKey, { algorithms: ["ES256"], audience: "addressrules.xyz/refresh", issuer: "addressrules.xyz/signer" }) as { sub: string, jti: string, ver: number };
+    if (WEB_TOKEN_CONFIG.baseClaim.ver !== payload.ver) {
+        return res.status(403).json("legacy version")
+    }
     if (! await isValidRT(payload.sub, payload.jti)) {
-        return res.status(401).end();
+        return res.status(401).json("blacklisted refresh token");
     }
 
     await redis.zRem(`user_sessions:${payload.sub}`, payload.jti);
 
     const newRtJTI = randomUUID();
     const accessToken = jwt.sign(
-        { sub: payload.sub, aud: "addressrules.xyz/access", parent_id: newRtJTI, iss: "addressrules.xyz/signer" },
+        { sub: payload.sub, aud: "addressrules.xyz/access", parent_id: newRtJTI, ...WEB_TOKEN_CONFIG.baseClaim },
         cfg.jwt.privKey,
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.accessExpStr }
     );
     const newRefreshToken = jwt.sign(
-        { sub: payload.sub, aud: "addressrules.xyz/refresh", jti: newRtJTI, iss: "addressrules.xyz/signer" },
+        { sub: payload.sub, aud: "addressrules.xyz/refresh", jti: newRtJTI, ...WEB_TOKEN_CONFIG.baseClaim },
         cfg.jwt.privKey,
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.refreshExpStr }
     );
@@ -74,6 +81,7 @@ app.post("/account/refresh-access-token", async (req, res) => {
     await redis.zAdd(`user_sessions:${payload.sub}`, { score: Date.now() + WEB_TOKEN_CONFIG.refreshExpMs /*expiery time*/, value: newRtJTI })
     await redis.zRemRangeByRank(`user_sessions:${payload.sub}`, 0, -5) // limit to 4 concurrent sessions per user
 
+    console.log("\nnew: ", newRefreshToken)
     res.cookie("refreshToken", newRefreshToken, {
         httpOnly: true,
         secure: true,
@@ -130,15 +138,15 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 
     const [account] = await sql`
     WITH inserted AS (
-        INSERT INTO accounts (vendor, indentifier, salt)
+        INSERT INTO accounts (provider, identifier, salt)
         VALUES (${walletType}, ${address}, ${randomBytes(32).toString("hex")})
-        ON CONFLICT (vendor, indentifier) DO NOTHING
+        ON CONFLICT (provider, identifier) DO NOTHING
         RETURNING id
     )
     SELECT * FROM inserted
     UNION ALL
     SELECT id FROM accounts 
-    WHERE vendor = ${walletType} AND indentifier = ${address}
+    WHERE provider = ${walletType} AND identifier = ${address}
     AND NOT EXISTS (SELECT 1 FROM inserted)
     `;
 
@@ -146,12 +154,12 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 
     const rtJTI = randomUUID();
     const refreshToken = jwt.sign(
-        { sub: account.id, aud: "addressrules.xyz/refresh", jti: rtJTI, iss: "addressrules.xyz/signer" },
+        { sub: account.id, aud: "addressrules.xyz/refresh", jti: rtJTI, iss: "addressrules.xyz/signer", ver: 1 },
         cfg.jwt.privKey,
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.refreshExpStr }
     );
     const accessToken = jwt.sign(
-        { sub: account.id, aud: "addressrules.xyz/access", parent_id: rtJTI, iss: "addressrules.xyz/signer" },
+        { sub: account.id, aud: "addressrules.xyz/access", parent_id: rtJTI, iss: "addressrules.xyz/signer", ver: 1 },
         cfg.jwt.privKey,
         { algorithm: "ES256", expiresIn: WEB_TOKEN_CONFIG.accessExpStr }
     );

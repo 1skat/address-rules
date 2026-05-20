@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken"
 import type { Request, Response, NextFunction } from "express"
 import { cfg } from "@/config.js";
 import redis from "@/internal/redis.js"
+import { WEB_TOKEN_CONFIG } from "@/index.js";
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -9,15 +10,19 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         if (!header) return res.status(401).end();
 
         const parts = header.split(" ");
-        if (parts.length !== 2 || parts[0] !== "Bearer" || !parts[1]) return res.status(401).json("");
+        if (parts.length !== 2 || parts[0] !== "Bearer" || !parts[1]) {
+            return res.status(401).json("");
+        }
 
         const token = parts[1];
 
-        console.log("token verifying", token)
-        const payload = jwt.verify(token, cfg.jwt.pubKey, { algorithms: ["ES256"] }) as { sub: string, parent_id: string };
+        const payload = jwt.verify(token, cfg.jwt.pubKey, { algorithms: ["ES256"], audience: "addressrules.xyz/access", issuer: "addressrules.xyz/signer" }) as { sub: string, parent_id: string, ver: number };
+        if (WEB_TOKEN_CONFIG.baseClaim.ver !== payload.ver) {
+            return res.status(403).end()
+        }
 
         if (!await isValidRT(payload.sub, payload.parent_id)) {
-            return res.status(401).end()
+            return res.status(403).end()
         }
 
         req.user = payload;
