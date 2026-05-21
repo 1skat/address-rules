@@ -10,9 +10,12 @@
     "dev:fe": "npm -w packages/frontend run dev"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
-    "redis": "^5.12.1"
+    "idb": "^8.0.3",
+    "redis": "^5.12.1",
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10"

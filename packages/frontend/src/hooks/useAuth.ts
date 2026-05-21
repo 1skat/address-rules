@@ -1,9 +1,10 @@
 import { jwtDecode } from "jwt-decode";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useCallback, useState } from "react";
 import { initLogin, verifyLogin } from "../api/client";
 import type { SolanaSignInInput } from '@solana/wallet-standard-features';
-import { useAuthStore } from "../store/storeAuth";
+import { useAuthStore } from "../store/authStore";
+import { useOnbordingStore } from "../store/onboardingStore";
+import { useCallback } from "react";
 
 export const useAuth = () => {
     const { wallet, connect, connected } = useWallet()
@@ -37,7 +38,8 @@ export const useAuth = () => {
             }
         });
         const { sub } = jwtDecode<{ sub: string }>(accessToken);
-        useAuthStore.getState().setUser({ id: sub });
+        useAuthStore.getState().setUser({ id: sub }); // set user's id to use inside the components
+        useOnbordingStore.setState({ step: "vault_check" })
 
     }, [wallet, connect, connected])
 
