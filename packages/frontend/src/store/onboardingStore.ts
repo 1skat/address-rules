@@ -13,9 +13,9 @@ type OnboardingStep =
 interface OnboardingStore {
     step: OnboardingStep;
     mnemonic: string | null;
-    setStep: (step: OnboardingStep) => void
-    setMnemonic: (mnemonic: string | null) => void
-}
+    setStep: (step: OnboardingStep) => void;
+    setMnemonic: (mnemonic: string | null) => void;
+};
 
 export const useOnbordingStore = create<OnboardingStore>((set) => ({
     step: "unauthenticated",
