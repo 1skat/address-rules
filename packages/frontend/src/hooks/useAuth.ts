@@ -38,10 +38,11 @@ export const useAuth = () => {
             }
         });
         const { sub } = jwtDecode<{ sub: string }>(accessToken);
-        useAuthStore.getState().setUser({ id: sub }); // set user's id to use inside the components
-        useOnbordingStore.setState({ step: "vault_check" })
+        useAuthStore.getState().setUser({ id: sub });
+        useAuthStore.getState().setAccessToken(accessToken);
+        useOnbordingStore.setState({ step: "vault_check" });
 
-    }, [wallet, connect, connected])
+    }, [wallet, connect, connected]);
 
     return { signIn }
 }

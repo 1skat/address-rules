@@ -28,6 +28,7 @@ export const MnemonicScreen = () => {
         return <span>waiting...</span>
     }
 
+    // put both in hooks
     return (
         <div>
             <div>

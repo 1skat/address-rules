@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+type Mnemonic = string | null;
 type OnboardingStep =
     | "unauthenticated"
     | "vault_check"
@@ -14,7 +15,8 @@ interface OnboardingStore {
     step: OnboardingStep;
     mnemonic: string | null;
     setStep: (step: OnboardingStep) => void;
-    setMnemonic: (mnemonic: string | null) => void;
+    setMnemonic: (mnemonic: Mnemonic) => void;
+    clearMenmonic: () => void;
 };
 
 export const useOnbordingStore = create<OnboardingStore>((set) => ({
@@ -22,7 +24,8 @@ export const useOnbordingStore = create<OnboardingStore>((set) => ({
     mnemonic: null,
 
     setStep: (step: OnboardingStep) => set({ step }),
-    setMnemonic: (mnemonic: string | null) => set({ mnemonic })
+    setMnemonic: (mnemonic: Mnemonic) => set({ mnemonic }),
+    clearMenmonic: () => set({ mnemonic: null }),
 }));
 
 

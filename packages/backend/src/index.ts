@@ -81,7 +81,6 @@ app.post("/account/refresh-access-token", async (req, res) => {
     await redis.zAdd(`user_sessions:${payload.sub}`, { score: Date.now() + WEB_TOKEN_CONFIG.refreshExpMs /*expiery time*/, value: newRtJTI })
     await redis.zRemRangeByRank(`user_sessions:${payload.sub}`, 0, -5) // limit to 4 concurrent sessions per user
 
-    console.log("\nnew: ", newRefreshToken)
     res.cookie("refreshToken", newRefreshToken, {
         httpOnly: true,
         secure: true,
@@ -142,15 +141,15 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
         VALUES (${walletType}, ${address}, ${randomBytes(32).toString("hex")})
         ON CONFLICT (provider, identifier) DO NOTHING
         RETURNING id
-    )
-    SELECT * FROM inserted
-    UNION ALL
-    SELECT id FROM accounts 
-    WHERE provider = ${walletType} AND identifier = ${address}
-    AND NOT EXISTS (SELECT 1 FROM inserted)
-    `;
+        )
+        SELECT * FROM inserted
+        UNION ALL
+        SELECT id FROM accounts 
+        WHERE provider = ${walletType} AND identifier = ${address}
+        AND NOT EXISTS (SELECT 1 FROM inserted)
+        `;
 
-    if (!account) return res.status(400).json("db failed");
+    if (!account) return res.status(400).json("db failed"); // remove in prod
 
     const rtJTI = randomUUID();
     const refreshToken = jwt.sign(

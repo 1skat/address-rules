@@ -8,7 +8,6 @@ export const useVaultCheck = () => {
     useEffect(() => {
         checkMnemonicExists().then((hasMnemonic: boolean) => {
             setStep(hasMnemonic ? "ready" : "create_mnemonic")
-
         })
     }, []);
 }

@@ -1,27 +1,35 @@
 import { useState } from "react";
 import { useOnbordingStore } from "../store/onboardingStore";
+import { generateIndecies } from "../lib/utils";
 
 export const MnemonicVerifier = () => {
-    const [threeWordsFromMnemonic, setThreeWordsFromMnemonic] = useState("");
-    const [invalidMnemonicErr, setInvalidMnemonicErr] = useState<string | null>(null);
+    const [userInput, setUserInput] = useState("");
+    const [mnemonicErr, setMnemonicErr] = useState<string | null>(null);
+    const [indecies] = useState(() => generateIndecies())
 
     const handleVerify = () => {
-        const userMnemonic = useOnbordingStore.getState().mnemonic;
-        const isValid = userMnemonic?.includes(threeWordsFromMnemonic);
+        const storedMnemonic = useOnbordingStore.getState().mnemonic?.split(" ");
+        if (!storedMnemonic) return null;
 
-        if (!isValid || threeWordsFromMnemonic.length !== 3) {
-            setInvalidMnemonicErr("Mnemonic is invalid")
+        const validWords = indecies.map(i => storedMnemonic[i]);
+        const userMnemonic = userInput.trim().split(" ");
+
+        const isValid = validWords.every((word, i) => word === userMnemonic[i])
+
+        if (!isValid) {
+            setMnemonicErr("Mnemonic is invalid");
             return;
         }
 
-        return setInvalidMnemonicErr(null)
+        useOnbordingStore.getState().setStep("password");
+        return setMnemonicErr(null);
     }
 
     return (
         <div>
-            {invalidMnemonicErr && <p className="text-red-500">{invalidMnemonicErr}</p>}
-            <span>Provide the pharse:</span>
-            <input value={threeWordsFromMnemonic} onChange={(e) => setThreeWordsFromMnemonic(e.target.value)}></input>
+            {mnemonicErr && <p className="text-red-500">{mnemonicErr}</p>}
+            <span>What is word: {indecies.map(i => i + 1).join(", ").trim()}</span>
+            <input value={userInput} onChange={(e) => setUserInput(e.target.value)}></input>
             <button onClick={handleVerify}>Verify</button>
         </div>
     )
