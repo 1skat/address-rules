@@ -83,7 +83,7 @@ app.post("/account/refresh-access-token", async (req, res) => {
 
     res.cookie("refreshToken", newRefreshToken, {
         httpOnly: true,
-        secure: true,
+        secure: cfg.node_env === "production",
         sameSite: "strict",
         maxAge: WEB_TOKEN_CONFIG.refreshExpMs, // 7 days
         path: "/account"
@@ -98,7 +98,7 @@ app.post("/account/login-by-wallet/init", async (req, res) => {
     const [_, invalid] = tryCatch(() => new PublicKey(address));
     if (invalid) {
         return res.status(400).json("invalid")
-    };
+    }
 
     const existing = nonceCache.get(`nonce:${address}`);
     const nonce = existing ?? randomBytes(4).toString("hex");
@@ -120,6 +120,7 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
     const userSession = sessionCache.get(`session:${sessionId}`);
     if (!userSession) return res.status(401).json("");
 
+    console.log("OUTPUT:", output)
     const backendOutput = {
         account: {
             ...output.account,
@@ -168,8 +169,8 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: "strict",
+        secure: cfg.node_env === "production",
+        sameSite: cfg.node_env === "production" ? "strict" : "lax",
         maxAge: WEB_TOKEN_CONFIG.refreshExpMs, // 7 days
         path: "/account"
     });

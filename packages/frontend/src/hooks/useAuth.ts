@@ -1,23 +1,27 @@
 import { jwtDecode } from "jwt-decode";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { initLogin, verifyLogin } from "../api/client";
+import { initLogin, refreshAccessToken, verifyLogin } from "../api/client";
 import type { SolanaSignInInput } from '@solana/wallet-standard-features';
 import { useAuthStore } from "../store/authStore";
 import { useOnbordingStore } from "../store/onboardingStore";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import type { WalletName } from "@solana/wallet-adapter-base";
 
 export const useAuth = () => {
-    const { wallet, connect, connected } = useWallet()
+    const { wallet, connect, connected, select } = useWallet()
 
     const signIn = useCallback(async () => {
-        if (!wallet) return;
-        if (!connected) await connect()
+        if (!wallet) {
+            select("Phantom" as WalletName)
+            return;
+        }
+        if (!connected) await connect();
 
         const adapter = wallet.adapter;
         if (!adapter.publicKey || !("signIn" in adapter)) return;
         const address = adapter.publicKey.toBase58()
 
-        const { nonce, sessionId } = await initLogin(address)
+        const { nonce, sessionId } = await initLogin(address);
 
         const input: SolanaSignInInput = {
             domain: "addressrouter.xyz",
@@ -33,16 +37,21 @@ export const useAuth = () => {
         const { accessToken } = await verifyLogin({ // the jwt is returned here
             sessionId, walletType: "Phantom", address, input, output: {
                 account: { publicKey: Array.from(output.account.publicKey) },
-                signature: output.signature,
-                signedMessage: output.signedMessage,
+                signature: Array.from(output.signature),
+                signedMessage: Array.from(output.signedMessage),
             }
         });
         const { sub } = jwtDecode<{ sub: string }>(accessToken);
-        useAuthStore.getState().setUser({ id: sub });
-        useAuthStore.getState().setAccessToken(accessToken);
+        useAuthStore.getState().setUser({ id: sub }, accessToken);
         useOnbordingStore.setState({ step: "vault_check" });
 
-    }, [wallet, connect, connected]);
+    }, [wallet, connect, connected, select]);
 
     return { signIn }
+}
+
+export const useInitAuth = () => {
+    useEffect(() => {
+        refreshAccessToken()
+    }, [])
 }

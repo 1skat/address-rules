@@ -5,6 +5,7 @@ export const cfg = {
     },
     db: process.env.DATABASE_URL!,
     redis: process.env.REDIS_URL!,
+    node_env: process.env.NODE_ENV!,
 } as const;
 
 

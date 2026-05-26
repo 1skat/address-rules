@@ -3,11 +3,20 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { Layout } from './components/layout.tsx'
+import { useInitAuth } from './hooks/useAuth.ts'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+const Root = () => {
+  useInitAuth();
+  return (
     <Layout>
       <App />
     </Layout>
-  </StrictMode>,
+  )
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <Root />
+  </StrictMode>
 )
+

@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { ConnectButton } from "./signInButtom";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useAuthStore } from "../store/authStore";
 
 export const ProviderPopup = () => {
     const [open, setOpen] = useState(false);
-    const { connected } = useWallet()
+    const user = useAuthStore().user;
 
     return (
         <div>
-            <button onClick={() => setOpen(true)}>Connect</button>
+            {!user && <button onClick={() => setOpen(true)}>Connect</button>}
             {
-                open && !connected && (
+                open && !user && (
                     <div className="fixed inset-0 flex items-center justify-center bg-black/50">
                         <div className="bg-white p-10 shadow-lg w-120 flex flex-col">
                             < ConnectButton />

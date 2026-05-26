@@ -10,12 +10,12 @@ function App() {
   const step = useOnbordingStore(s => s.step)
 
   switch (step) {
-    case "unauthenticated": return null;
+    case "unauthenticated": return;
     case "vault_check": return <VaultChecker />;
     case "create_mnemonic": return <MnemonicScreen />;
     case "confirm_mnemonic": return <MnemonicVerifier />;
     case "password": return <PasswordCreator />;
-    case "ready": return <span>done</span>;
+    case "ready": return null;
   }
 }
 

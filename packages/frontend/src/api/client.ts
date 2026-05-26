@@ -1,3 +1,7 @@
+import { jwtDecode } from "jwt-decode";
+import { useAuthStore } from "../store/authStore";
+import { useOnbordingStore } from "../store/onboardingStore";
+
 const BASE_URL = "http://localhost:3000"
 
 const post = (path: string, body: object) =>
@@ -11,4 +15,62 @@ export const initLogin = (address: string): Promise<{ nonce: string, sessionId: 
     post("account/login-by-wallet/init", { address, walletType: "Phantom", chain: "sol" });
 
 export const verifyLogin = (body: object) =>
-    post("account/login-by-wallet/verify", body)
+    // post("account/login-by-wallet/verify", body)
+    fetch(`${BASE_URL}/account/login-by-wallet/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body)
+    }).then(resp => resp.json());
+
+export const refreshAccessToken = async () => {
+    try {
+        const res = await fetch("http://localhost:3000/account/refresh-access-token", {
+            method: "POST",
+            credentials: "include",
+        });
+        if (!res) {
+            useOnbordingStore.getState().setStep("unauthenticated")
+        }
+
+        const { accessToken } = await res.json();
+        const { sub } = jwtDecode<{ sub: string }>(accessToken);
+        useAuthStore.getState().setUser({ id: sub }, accessToken);
+        useOnbordingStore.getState().setStep("vault_check");
+    } catch {
+        useOnbordingStore.getState().setStep("unauthenticated")
+    }
+}
+
+export const apiFetch = async (url: string, options: RequestInit = {}) => {
+    const makeRequest = async (at: string) => fetch(url, {
+        ...options,
+        headers: {
+            ...options.headers,
+            Authorization: `Bearer ${at}`
+        }
+    });
+    const token = useAuthStore.getState().accessToken;
+    if (!token) {
+        useOnbordingStore.getState().setStep("unauthenticated");
+        return;
+    }
+    const res = await makeRequest(token);
+
+    if (res.status === 401) {
+        await refreshAccessToken()
+        const newToken = useAuthStore.getState().accessToken;
+        if (!newToken) {
+            useOnbordingStore.getState().setStep("unauthenticated");
+            return;
+        }
+        const retryRes = await makeRequest(newToken);
+        if (retryRes.status === 401) {
+            useOnbordingStore.getState().setStep("unauthenticated");
+            return;
+        }
+        return retryRes;
+    }
+
+    return res;
+}

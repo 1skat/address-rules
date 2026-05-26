@@ -9,4 +9,10 @@ export default defineConfig({
     tailwindcss(),
     nodePolyfills(),
   ],
+  server: {
+    hmr: false,
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true
+  }
 })
