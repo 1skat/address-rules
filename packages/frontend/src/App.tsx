@@ -5,14 +5,16 @@ import { MnemonicScreen } from './components/createMnemonic';
 import { VaultChecker } from './components/vaultChecker';
 import { MnemonicVerifier } from './components/mnemonicVerifier';
 import { PasswordCreator } from './components/passwordCreator';
+import { UnlockMnemonic } from './components/unlockMnemonic';
 
 function App() {
-  const step = useOnbordingStore(s => s.step)
+  const step = useOnbordingStore(s => s.step);
 
   switch (step) {
-    case "unauthenticated": return;
+    case "unauthenticated": return null;
     case "vault_check": return <VaultChecker />;
     case "create_mnemonic": return <MnemonicScreen />;
+    case "unlock": return <UnlockMnemonic />;
     case "confirm_mnemonic": return <MnemonicVerifier />;
     case "password": return <PasswordCreator />;
     case "ready": return null;

@@ -30,3 +30,24 @@ export const saveMnemonic = async (encryptedBlob: Uint8Array<ArrayBuffer>) => {
     }
 }
 
+export const getMnemonic = async () => {
+    try {
+        const db = await connectDb();
+        return await db.get(STORE_NAME, "encrypted_mnemonic");
+    } catch (err) {
+        console.error("Failed to save mnemonic", err)
+        return null;
+    }
+}
+
+export const clearMnemonic = async () => {
+    try {
+        const db = await connectDb();
+        await db.clear(STORE_NAME);
+        return true;
+    } catch (err) {
+        console.error("Failed to save mnemonic", err)
+        return false
+    }
+}
+

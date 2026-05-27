@@ -120,7 +120,6 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
     const userSession = sessionCache.get(`session:${sessionId}`);
     if (!userSession) return res.status(401).json("");
 
-    console.log("OUTPUT:", output)
     const backendOutput = {
         account: {
             ...output.account,

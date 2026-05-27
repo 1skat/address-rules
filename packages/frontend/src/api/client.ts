@@ -1,6 +1,7 @@
 import { jwtDecode } from "jwt-decode";
 import { useAuthStore } from "../store/authStore";
 import { useOnbordingStore } from "../store/onboardingStore";
+import { clearMnemonic } from "../lib/vault";
 
 const BASE_URL = "http://localhost:3000"
 
@@ -8,14 +9,13 @@ const post = (path: string, body: object) =>
     fetch(`${BASE_URL}/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
     }).then(resp => resp.json());
 
 export const initLogin = (address: string): Promise<{ nonce: string, sessionId: string }> =>
     post("account/login-by-wallet/init", { address, walletType: "Phantom", chain: "sol" });
 
 export const verifyLogin = (body: object) =>
-    // post("account/login-by-wallet/verify", body)
     fetch(`${BASE_URL}/account/login-by-wallet/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -30,7 +30,7 @@ export const refreshAccessToken = async () => {
             credentials: "include",
         });
         if (!res) {
-            useOnbordingStore.getState().setStep("unauthenticated")
+            useOnbordingStore.getState().setStep("unauthenticated");
         }
 
         const { accessToken } = await res.json();
@@ -38,7 +38,7 @@ export const refreshAccessToken = async () => {
         useAuthStore.getState().setUser({ id: sub }, accessToken);
         useOnbordingStore.getState().setStep("vault_check");
     } catch {
-        useOnbordingStore.getState().setStep("unauthenticated")
+        useOnbordingStore.getState().setStep("unauthenticated");
     }
 }
 
@@ -73,4 +73,19 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
     }
 
     return res;
+}
+
+export const logout = async () => {
+    try {
+        await apiFetch(`${BASE_URL}/account/logout`, {
+            method: "POST",
+            credentials: "include",
+        }).then(resp => resp.text());
+    } catch (err) {
+        console.error(err);
+    } finally {
+        await clearMnemonic()
+        useAuthStore.getState().clearAuth();
+        useOnbordingStore.getState().setStep("unauthenticated");
+    }
 }

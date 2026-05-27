@@ -5,6 +5,7 @@ type OnboardingStep =
     | "unauthenticated"
     | "vault_check"
     | "enter_existing_mnemonic"
+    | "unlock"
     | "create_mnemonic"
     | "confirm_mnemonic"
     | "password"

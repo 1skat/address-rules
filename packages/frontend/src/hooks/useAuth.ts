@@ -6,9 +6,10 @@ import { useAuthStore } from "../store/authStore";
 import { useOnbordingStore } from "../store/onboardingStore";
 import { useCallback, useEffect } from "react";
 import type { WalletName } from "@solana/wallet-adapter-base";
+import { checkMnemonicExists } from "../lib/vault";
 
 export const useAuth = () => {
-    const { wallet, connect, connected, select } = useWallet()
+    const { wallet, connect, connected, select } = useWallet();
 
     const signIn = useCallback(async () => {
         if (!wallet) {
@@ -52,6 +53,12 @@ export const useAuth = () => {
 
 export const useInitAuth = () => {
     useEffect(() => {
-        refreshAccessToken()
+        (async () => {
+            await refreshAccessToken();
+            const hasMnemonic = await checkMnemonicExists();
+            if (hasMnemonic) {
+                useOnbordingStore.getState().setStep("unlock");
+            }
+        })();
     }, [])
 }
