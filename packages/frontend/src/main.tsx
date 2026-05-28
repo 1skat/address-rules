@@ -6,11 +6,11 @@ import { Layout } from './components/layout.tsx'
 import { useInitAuth } from './hooks/useAuth.ts'
 
 const Root = () => {
-  useInitAuth();
+  // useInitAuth();
   return (
-    <Layout>
-      <App />
-    </Layout>
+    // <Layout>
+    <App />
+    // </Layout>
   )
 }
 

@@ -28,7 +28,7 @@ export const UnlockMnemonic = () => {
     return (
         <div>
             {err && <p className="text-rose-500">{err}</p>}
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}></input>
+            <input className="border-2 border-white" type="password" value={password} onChange={(e) => setPassword(e.target.value)}></input>
             <button onClick={handleUnlock} disabled={loading}>confirm</button>
         </div>
     );

@@ -10,6 +10,7 @@
     "dev:fe": "npm -w packages/frontend run dev"
   },
   "dependencies": {
+    "@scure/bip32": "^2.2.0",
     "@tailwindcss/vite": "^4.3.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",

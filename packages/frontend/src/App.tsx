@@ -6,18 +6,20 @@ import { VaultChecker } from './components/vaultChecker';
 import { MnemonicVerifier } from './components/mnemonicVerifier';
 import { PasswordCreator } from './components/passwordCreator';
 import { UnlockMnemonic } from './components/unlockMnemonic';
+import { WalletCanvas } from './components/canvas/WalletCanvas';
+import { ReactFlowProvider } from '@xyflow/react';
 
 function App() {
   const step = useOnbordingStore(s => s.step);
 
   switch (step) {
-    case "unauthenticated": return null;
-    case "vault_check": return <VaultChecker />;
-    case "create_mnemonic": return <MnemonicScreen />;
-    case "unlock": return <UnlockMnemonic />;
-    case "confirm_mnemonic": return <MnemonicVerifier />;
-    case "password": return <PasswordCreator />;
-    case "ready": return null;
+    // case "unauthenticated": return null;
+    // case "vault_check": return <VaultChecker />;
+    // case "create_mnemonic": return <MnemonicScreen />;
+    // // case "unlock": return <UnlockMnemonic />;
+    // case "confirm_mnemonic": return <MnemonicVerifier />;
+    // case "password": return <PasswordCreator />;
+    case "ready": return <WalletCanvas />;
   }
 }
 
