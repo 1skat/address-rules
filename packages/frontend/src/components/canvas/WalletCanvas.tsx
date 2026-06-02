@@ -1,6 +1,6 @@
 import { ReactFlow, Background, Panel, useReactFlow, ReactFlowProvider, applyNodeChanges, type Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
 import { useCanvasStore } from '../../store/useCanvasStore';
 import { WalletNode } from '../walletNode';
@@ -31,10 +31,10 @@ const WalletCanvasInner = () => {
 
     const { screenToFlowPosition } = useReactFlow();
 
-    const nodes = useCanvasStore(s => s.nodes); // wallet nodes
-    const setNodes = useCanvasStore(s => s.setNodes); // set wallet nodes (update on changes)
-    const addNode = useCanvasStore(s => s.addNode); // add a new node
-    const onNodesChange = useCallback((change) => { // custom callback
+    const nodes = useCanvasStore(s => s.nodes);
+    const setNodes = useCanvasStore(s => s.setNodes);
+    const addNode = useCanvasStore(s => s.addNode);
+    const onNodesChange = useCallback((change) => {
         setNodes(applyNodeChanges(change, nodes));
     }, [nodes, setNodes]);
 
@@ -56,8 +56,9 @@ const WalletCanvasInner = () => {
     }, [activeTool, addNode, screenToFlowPosition]);
 
     return (
-        <div className="w-screen h-screen">
+        <div className="w-screen h-screen" data-tool={activeTool}>
             <ReactFlow
+                className='bg-amber-50'
                 defaultViewport={defaultViewport}
                 onMove={onMove}
                 fitView={false}
@@ -65,9 +66,9 @@ const WalletCanvasInner = () => {
                 nodes={nodes}
                 onNodesChange={onNodesChange}
                 onPaneClick={onPaneClick}
-                className='bg-amber-50'
                 panOnDrag={activeTool === "hand"}
                 selectionOnDrag={activeTool === "cursor"}
+                nodesDraggable={activeTool === "cursor"}
                 panOnScroll
             >
                 <Panel>

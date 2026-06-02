@@ -12,3 +12,7 @@ body,
 * {
   box-sizing: border-box;
 }
+
+[data-tool="hand"] .react-flow__node {
+  cursor: grab !important;
+}
