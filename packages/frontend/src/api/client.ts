@@ -44,8 +44,8 @@ export const refreshAccessToken = async () => {
     }
 }
 
-export const apiFetch = async (url: string, options: RequestInit = {}) => {
-    const makeRequest = async (at: string) => fetch(url, {
+export const apiFetch = async (path: string, options: RequestInit = {}) => {
+    const makeRequest = async (at: string) => fetch(`${BASE_URL}${path}`, {
         ...options,
         headers: {
             ...options.headers,
@@ -79,7 +79,7 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
 
 export const logout = async () => {
     try {
-        await apiFetch(`${BASE_URL}/account/logout`, {
+        await apiFetch("/account/logout", {
             method: "POST",
             credentials: "include",
         }).then(resp => resp.text());
@@ -94,12 +94,12 @@ export const logout = async () => {
 
 export const createWallet = async (chainCode: string, alias: string | null, position: XYPosition) => {
     try {
-        const { nextIndex } = await apiFetch(`${BASE_URL}/wallets/next-index`, {
+        const { nextIndex } = await apiFetch("/wallets/next-index", {
             method: "GET",
         }).then(resp => resp.json());
 
         const walletAddress = deriveWallet(chainCode, nextIndex);
-        return await apiFetch(`${BASE_URL}/wallets`, {
+        return await apiFetch("/wallets", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -112,6 +112,18 @@ export const createWallet = async (chainCode: string, alias: string | null, posi
             })
         }).then(resp => resp.json());
     } catch (err) {
-        console.error(err)
+        console.error(err);
+    }
+}
+
+export const archiveWallet = async (walletId: string) => {
+    try {
+        await apiFetch("/wallets/archive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ walletId }),
+        });
+    } catch (err) {
+        console.error(err);
     }
 }

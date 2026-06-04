@@ -177,9 +177,7 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
     return res.status(200).json({ accessToken });
 });
 
-app.post("/wallets", async (req, res) => {
-    console.log("hit")
-    console.log(req.body)
+app.post("/wallets", authenticate, async (req, res) => {
     const { address, derivationIndex, alias, chain, posX, posY } = req.body;
     try {
         const [wallet] = await sql`
@@ -200,13 +198,29 @@ app.post("/wallets", async (req, res) => {
         if (err.code === "23505") {
             return res.status(409).json("address already exists")
         }
+
+        return res.status(500).json(err.message)
     }
 });
 
 app.get("/wallets/next-index", authenticate, async (req, res) => {
-    const [{ max }] = await sql`SELECT MAX(derivation_index) as max FROM wallets WHERE account_id = ${req.user.sub} AND archived = false`;
+    const [{ max }] = await sql`SELECT MAX(derivation_index) as max FROM wallets WHERE account_id = ${req.user.sub}`;
 
     return res.status(200).json({ nextIndex: max === null ? 0 : max + 1 });
+})
+
+app.post("/wallets/archive", authenticate, async (req, res) => {
+    try {
+        const { walletId } = req.body;
+        if (!walletId) {
+            return res.status(400).json({ error: "cannot find wallet" });
+        }
+        await sql`UPDATE wallets SET archived = true WHERE id = ${walletId}`;
+
+        return res.status(200).end();
+    } catch {
+        return res.status(401).end();
+    }
 })
 
 app.use((err, req, res, next) => {

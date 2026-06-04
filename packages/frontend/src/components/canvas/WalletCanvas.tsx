@@ -1,5 +1,5 @@
 import { ReactFlow, Background, Panel, useReactFlow, ReactFlowProvider, applyNodeChanges, type Viewport } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import '@xyflow/react/dist/base.css';
 import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
 import { useCanvasStore } from '../../store/useCanvasStore';
@@ -54,7 +54,7 @@ const WalletCanvasInner = () => {
                 id: newWallet.id,
                 type: "wallet",
                 position: mousePosition,
-                data: { label: newWallet.alias ?? newWallet.address.slice(0, 8).padEnd(11, ".") },
+                data: { label: newWallet.alias ?? newWallet.address.slice(0, 5) + "..." + newWallet.address.slice(-4) },
             });
         } catch (err) {
             console.error(`ERROR adding wallet: ${err}`)
@@ -65,12 +65,13 @@ const WalletCanvasInner = () => {
     return (
         <div className="relative w-screen h-screen">
             <ReactFlow
-                className='bg-amber-50'
+                className='bg-amber-200'
                 defaultViewport={defaultViewport}
                 onMove={onMove}
                 fitView={false}
                 nodeTypes={nodeTypes}
                 nodes={nodes}
+                edges={[]}
                 onNodesChange={onNodesChange}
                 onPaneClick={onPaneClick}
                 panOnDrag={activeTool === "hand"}
