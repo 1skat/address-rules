@@ -2,7 +2,7 @@ import { getSeed } from "./seed"
 import { HDKey } from '@scure/bip32'
 import { Keypair } from "@solana/web3.js";
 
-export const deriveSolanaeWallet = (idx: number): Keypair => {
+const deriveSolanaeWallet = (idx: number): string => {
     const seed = getSeed();
     if (!seed) throw new Error("Vault is locked");
 
@@ -13,5 +13,13 @@ export const deriveSolanaeWallet = (idx: number): Keypair => {
         throw new Error("Failed to derive key");
     }
 
-    return Keypair.fromSeed(child.privateKey);
+    return Keypair.fromSeed(child.privateKey).publicKey.toBase58();
 }
+
+export const deriveWallet = (chainId: string, nextDerivationIdx: number) => {
+    if (chainId === "501") {
+        return deriveSolanaeWallet(nextDerivationIdx)
+    }
+}
+
+

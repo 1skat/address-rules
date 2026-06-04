@@ -2,6 +2,8 @@ import { jwtDecode } from "jwt-decode";
 import { useAuthStore } from "../store/authStore";
 import { useOnbordingStore } from "../store/onboardingStore";
 import { clearMnemonic } from "../lib/vault";
+import { deriveWallet } from "../lib/bip39";
+import type { XYPosition } from "@xyflow/react";
 
 const BASE_URL = "http://localhost:3000"
 
@@ -53,7 +55,7 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
     const token = useAuthStore.getState().accessToken;
     if (!token) {
         useOnbordingStore.getState().setStep("unauthenticated");
-        return;
+        throw new Error("Authentication failed")
     }
     const res = await makeRequest(token);
 
@@ -62,12 +64,12 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
         const newToken = useAuthStore.getState().accessToken;
         if (!newToken) {
             useOnbordingStore.getState().setStep("unauthenticated");
-            return;
+            throw new Error("Authentication failed")
         }
         const retryRes = await makeRequest(newToken);
         if (retryRes.status === 401) {
             useOnbordingStore.getState().setStep("unauthenticated");
-            return;
+            throw new Error("Authentication failed")
         }
         return retryRes;
     }
@@ -87,5 +89,29 @@ export const logout = async () => {
         await clearMnemonic()
         useAuthStore.getState().clearAuth();
         useOnbordingStore.getState().setStep("unauthenticated");
+    }
+}
+
+export const createWallet = async (chainCode: string, alias: string | null, position: XYPosition) => {
+    try {
+        const { nextIndex } = await apiFetch(`${BASE_URL}/wallets/next-index`, {
+            method: "GET",
+        }).then(resp => resp.json());
+
+        const walletAddress = deriveWallet(chainCode, nextIndex);
+        return await apiFetch(`${BASE_URL}/wallets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                address: walletAddress,
+                derivationIndex: nextIndex,
+                alias,
+                chain: chainCode,
+                posX: position.x,
+                posY: position.y,
+            })
+        }).then(resp => resp.json());
+    } catch (err) {
+        console.error(err)
     }
 }

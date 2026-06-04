@@ -6,6 +6,8 @@ import { useCanvasStore } from '../../store/useCanvasStore';
 import { WalletNode } from '../walletNode';
 import { getStoredViewport, saveViewport } from '../../store/canvasViewport';
 import { throttle } from '../utils/throttle';
+import { SettingsCard } from './settingsCard';
+import { createWallet } from '../../api/client';
 
 export const WalletCanvas = () => {
     return (
@@ -38,7 +40,7 @@ const WalletCanvasInner = () => {
         setNodes(applyNodeChanges(change, nodes));
     }, [nodes, setNodes]);
 
-    const onPaneClick = useCallback((e: React.MouseEvent) => {
+    const onPaneClick = useCallback(async (e: React.MouseEvent) => {
         if (activeTool !== "add") return;
 
         const mousePosition = screenToFlowPosition({
@@ -46,17 +48,22 @@ const WalletCanvasInner = () => {
             y: e.clientY,
         });
 
-        addNode({
-            id: crypto.randomUUID(),
-            type: "wallet",
-            position: mousePosition,
-            data: { label: "new wallet" },
-        });
+        try {
+            const newWallet = await createWallet("501", null, mousePosition);
+            addNode({
+                id: newWallet.id,
+                type: "wallet",
+                position: mousePosition,
+                data: { label: newWallet.alias ?? newWallet.address.slice(0, 8).padEnd(11, ".") },
+            });
+        } catch (err) {
+            console.error(`ERROR adding wallet: ${err}`)
+        }
 
     }, [activeTool, addNode, screenToFlowPosition]);
 
     return (
-        <div className="w-screen h-screen" data-tool={activeTool}>
+        <div className="relative w-screen h-screen">
             <ReactFlow
                 className='bg-amber-50'
                 defaultViewport={defaultViewport}
@@ -71,11 +78,10 @@ const WalletCanvasInner = () => {
                 nodesDraggable={activeTool === "cursor"}
                 panOnScroll
             >
-                <Panel>
-                    <CanvasToolbar />
-                </Panel>
                 <Background variant='dots' />
+                <CanvasToolbar />
+                <SettingsCard />
             </ReactFlow>
-        </div>
+        </div >
     );
 }

@@ -25,7 +25,7 @@ export const useAuth = () => {
         const { nonce, sessionId } = await initLogin(address);
 
         const input: SolanaSignInInput = {
-            domain: "addressrouter.xyz",
+            domain: "localhost:5173",
             uri: "https://addressrouter.com",
             statement: "Clicking Sign or Approve only means you have proved this wallet is owned by you. This request will not trigger any blockchain transaction or cost any gas fee.",
             nonce,

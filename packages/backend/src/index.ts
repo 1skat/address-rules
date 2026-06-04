@@ -177,6 +177,38 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
     return res.status(200).json({ accessToken });
 });
 
+app.post("/wallets", async (req, res) => {
+    console.log("hit")
+    console.log(req.body)
+    const { address, derivationIndex, alias, chain, posX, posY } = req.body;
+    try {
+        const [wallet] = await sql`
+            INSERT INTO wallets (account_id, address, derivation_index, alias, chain, position_x, position_y)
+            VALUES (
+            ${req.user.sub},
+            ${address},
+            ${derivationIndex},
+            ${alias},
+            ${chain},
+            ${posX},
+            ${posY})
+            RETURNING *
+            `;
+
+        return res.status(201).json(wallet);
+    } catch (err) {
+        if (err.code === "23505") {
+            return res.status(409).json("address already exists")
+        }
+    }
+});
+
+app.get("/wallets/next-index", authenticate, async (req, res) => {
+    const [{ max }] = await sql`SELECT MAX(derivation_index) as max FROM wallets WHERE account_id = ${req.user.sub} AND archived = false`;
+
+    return res.status(200).json({ nextIndex: max === null ? 0 : max + 1 });
+})
+
 app.use((err, req, res, next) => {
 
     res.status(500).json({

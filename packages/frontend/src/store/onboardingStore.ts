@@ -21,7 +21,7 @@ interface OnboardingStore {
 };
 
 export const useOnbordingStore = create<OnboardingStore>((set) => ({
-    step: "ready",
+    step: "unauthenticated",
     mnemonic: null,
 
     setStep: (step: OnboardingStep) => set({ step }),
