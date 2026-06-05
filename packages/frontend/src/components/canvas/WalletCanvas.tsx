@@ -1,4 +1,4 @@
-import { ReactFlow, Background, Panel, useReactFlow, ReactFlowProvider, applyNodeChanges, type Viewport } from '@xyflow/react';
+import { ReactFlow, Background, useReactFlow, ReactFlowProvider, type Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
@@ -8,6 +8,7 @@ import { getStoredViewport, saveViewport } from '../../store/canvasViewport';
 import { throttle } from '../utils/throttle';
 import { SettingsCard } from './settingsCard';
 import { createWallet } from '../../api/client';
+import { WalletEdge } from '../walletEdge';
 
 export const WalletCanvas = () => {
     return (
@@ -18,6 +19,7 @@ export const WalletCanvas = () => {
 }
 
 const nodeTypes = { wallet: WalletNode };
+const edgeTypes = { wallet: WalletEdge };
 
 const WalletCanvasInner = () => {
     const activeTool = useCanvasStore(s => s.activeTool);
@@ -33,12 +35,15 @@ const WalletCanvasInner = () => {
 
     const { screenToFlowPosition } = useReactFlow();
 
+    // Nodes
     const nodes = useCanvasStore(s => s.nodes);
     const setNodes = useCanvasStore(s => s.setNodes);
     const addNode = useCanvasStore(s => s.addNode);
-    const onNodesChange = useCallback((change) => {
-        setNodes(applyNodeChanges(change, nodes));
-    }, [nodes, setNodes]);
+
+    // Edges
+    const edges = useCanvasStore(s => s.edges);
+    const addConnection = useCanvasStore(s => s.addConnection);
+    const setEdges = useCanvasStore(s => s.setEdges);
 
     const onPaneClick = useCallback(async (e: React.MouseEvent) => {
         if (activeTool !== "add") return;
@@ -70,9 +75,12 @@ const WalletCanvasInner = () => {
                 onMove={onMove}
                 fitView={false}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 nodes={nodes}
-                edges={[]}
-                onNodesChange={onNodesChange}
+                edges={edges}
+                onNodesChange={setNodes}
+                onEdgesChange={setEdges}
+                onConnect={addConnection}
                 onPaneClick={onPaneClick}
                 panOnDrag={activeTool === "hand"}
                 selectionOnDrag={activeTool === "cursor"}

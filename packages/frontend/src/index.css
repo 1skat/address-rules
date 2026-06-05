@@ -16,3 +16,22 @@ body,
 [data-tool="hand"] .react-flow__node {
   cursor: grab !important;
 }
+
+.react-flow__handle {
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+@keyframes dashMove {
+  from {
+    stroke-dashoffset: 15;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
