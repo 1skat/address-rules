@@ -6,6 +6,7 @@ export const cfg = {
     db: process.env.DATABASE_URL!,
     redis: process.env.REDIS_URL!,
     node_env: process.env.NODE_ENV!,
+    solana_rpc_endpoint: process.env.SOLANA_RPC_URL!
 } as const;
 
 

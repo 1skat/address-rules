@@ -22,9 +22,9 @@ const getSpecialPath = (
         centerX,
         centerY + offset / 2,
     ];
-}; // M (starts at the source )
+};
 
-export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, selected }: EdgeProps) => {
+export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target }: EdgeProps) => {
     const edges = useCanvasStore((s) => s.edges);
     const isBidirectionalEdge = edges.some(e => (e.source === target && e.target === source) || (e.target === source && e.source === target));
 

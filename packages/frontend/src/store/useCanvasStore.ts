@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import { addEdge, applyEdgeChanges, applyNodeChanges, type Edge, type Node } from "@xyflow/react"
+import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 
 type Tool = "hand" | "cursor" | "add" | "remove";
 
@@ -13,7 +13,8 @@ type CanvasStore = {
     removeNode: (id: string) => void;
     edges: Edge[];
     setEdges: (change: any) => void;
-    addConnection: (connection: any) => void;
+    addConnection: (connection: Connection) => void;
+    reconnectEdge: (oldEdge: Edge, newConnection: Connection) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -36,6 +37,9 @@ export const useCanvasStore = create<CanvasStore>()(
                 }, s.edges)
             })),
             setEdges: (change) => set((s) => ({ edges: applyEdgeChanges(change, s.edges) })),
+            reconnectEdge: (oldEdge: Edge, newConnection: Connection) => set((s) => ({
+                edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
+            })),
         }),
         { name: "canvas-store" }
     )

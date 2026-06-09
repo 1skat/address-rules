@@ -4,6 +4,7 @@ import { useOnbordingStore } from "../store/onboardingStore";
 import { clearMnemonic } from "../lib/vault";
 import { deriveWallet } from "../lib/bip39";
 import type { XYPosition } from "@xyflow/react";
+import type { Base64EncodedWireTransaction, Blockhash, Signature } from "@solana/kit"
 
 const BASE_URL = "http://localhost:3000"
 
@@ -127,3 +128,24 @@ export const archiveWallet = async (walletId: string) => {
         console.error(err);
     }
 }
+
+export const getBlockhash = async (): Promise<Readonly<{
+    blockhash: Blockhash;
+    lastValidBlockHeight: bigint;
+}>> => {
+    const resp = await fetch(`${BASE_URL}/transactions/blockhash`, {
+        method: "GET"
+    })
+    return await resp.json();
+}
+
+export const sendTx = async (signedTx: Base64EncodedWireTransaction): Promise<Signature> => {
+    const resp = await apiFetch("/transactions/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedTx }),
+    });
+
+    return await resp.json();
+}
+
