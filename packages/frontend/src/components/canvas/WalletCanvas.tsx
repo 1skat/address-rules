@@ -1,4 +1,4 @@
-import { ReactFlow, Background, useReactFlow, ReactFlowProvider, type Viewport } from '@xyflow/react';
+import { ReactFlow, Background, useReactFlow, ReactFlowProvider, type Viewport, ConnectionMode } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
@@ -9,6 +9,7 @@ import { throttle } from '../utils/throttle';
 import { SettingsCard } from './settingsCard';
 import { createWallet } from '../../api/client';
 import { WalletEdge } from '../walletEdge';
+import { ConnectionLine } from '../connectionLine';
 
 export const WalletCanvas = () => {
     return (
@@ -62,7 +63,7 @@ const WalletCanvasInner = () => {
                 data: { label: newWallet.alias ?? newWallet.address.slice(0, 5) + "..." + newWallet.address.slice(-4) },
             });
         } catch (err) {
-            console.error(`ERROR adding wallet: ${err}`)
+            console.error(`ERROR adding wallet: ${err}`);
         }
 
     }, [activeTool, addNode, screenToFlowPosition]);
@@ -72,6 +73,8 @@ const WalletCanvasInner = () => {
             <ReactFlow
                 className='bg-amber-200'
                 defaultViewport={defaultViewport}
+                connectionLineComponent={ConnectionLine}
+                connectionMode={ConnectionMode.Loose}
                 onMove={onMove}
                 fitView={false}
                 nodeTypes={nodeTypes}
