@@ -48,9 +48,8 @@ const WalletCanvasInner = () => {
     const edges = useCanvasStore(s => s.edges);
     const addConnection = useCanvasStore(s => s.addConnection);
     const setEdges = useCanvasStore(s => s.setEdges);
-    const reconnectEdge = useCanvasStore(s => s.reconnectEdge);
     const { onNodeMouseEnter } = useNodeInteraction();
-    const { onEdgeMouseEnter } = useEdgeInteraction();
+    const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd } = useEdgeInteraction();
 
 
     const onPaneClick = useCallback(async (e: React.MouseEvent) => {
@@ -93,7 +92,9 @@ const WalletCanvasInner = () => {
                 onNodesChange={setNodes}
                 onEdgesChange={setEdges}
                 onConnect={addConnection}
-                onReconnect={reconnectEdge}
+                onReconnectStart={onReconnectStart}
+                onReconnect={onReconnect}
+                onReconnectEnd={onReconnectEnd}
                 onPaneClick={onPaneClick}
                 panOnDrag={activeTool === "hand"}
                 selectionOnDrag={activeTool === "cursor"}
