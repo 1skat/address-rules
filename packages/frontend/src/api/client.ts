@@ -139,13 +139,11 @@ export const getBlockhash = async (): Promise<Readonly<{
     return await resp.json();
 }
 
-export const sendTx = async (signedTx: Base64EncodedWireTransaction): Promise<Signature> => {
-    const resp = await apiFetch("/transactions/send", {
+export const sendSolanaTx = async (signedTx: Base64EncodedWireTransaction): Promise<Signature> => {
+    return await apiFetch("/transactions/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ signedTx }),
-    });
-
-    return await resp.json();
+    }).then(resp => resp.json());
 }
 

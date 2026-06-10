@@ -35,3 +35,7 @@ body,
 .react-flow__edge.selectable.selected .react-flow__edge-path {
   stroke: #000;
 }
+
+[data-tool]:not([data-tool="arrow"]) .react-flow__handle {
+  pointer-events: none !important;
+}

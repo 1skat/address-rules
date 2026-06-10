@@ -8,7 +8,7 @@ txRouter.post("/send", async (req, res) => {
     const { signedTx } = req.body;
     const [signature, txErr] = await tryCatchAsync(() => solanaRpc.sendTransaction(signedTx).send());
     if (txErr) {
-        return res.status(400).json("Failed to send transcation");
+        return res.status(400).json("Failed to send transaction");
     }
 
     return res.status(200).json({ signature });

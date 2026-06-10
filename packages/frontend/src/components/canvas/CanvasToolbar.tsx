@@ -1,15 +1,15 @@
 import { memo } from "react";
-import { useCanvasStore } from "../../store/useCanvasStore";
 import { Panel } from "@xyflow/react";
+import { useToolStore } from "../../store/useToolStore";
 
 export const CanvasToolbar = memo(() => {
-    const activeTool = useCanvasStore(s => s.activeTool);
-    const setActiveTool = useCanvasStore(s => s.setActiveTool);
+    const activeTool = useToolStore(s => s.activeTool);
+    const setActiveTool = useToolStore(s => s.setActiveTool);
 
     return (
         <Panel position='top-center'>
             <div className="flex gap-2 bg-transparent rounded-xl shadow-md px-3 py-2">
-                {(["hand", "cursor", "add", "remove"]).map((tool) => (
+                {(["hand", "cursor", "add", "arrow", "remove"]).map((tool) => (
                     <button
                         key={tool}
                         onClick={() => setActiveTool(tool)}
@@ -19,7 +19,7 @@ export const CanvasToolbar = memo(() => {
                                 : 'text-gray-500 hover:bg-gray-100'
                             }`}
                     >{
-                            tool === "cursor" ? "↖" : tool === "hand" ? "✋" : tool === "add" ? "+" : "x"}</button>
+                            tool === "cursor" ? "↖" : tool === "hand" ? "✋" : tool === "add" ? "+" : tool === "arrow" ? "->" : "x"}</button>
                 ))}
             </div>
         </Panel>

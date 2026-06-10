@@ -27,7 +27,6 @@ const getSpecialPath = (
 export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target }: EdgeProps) => {
     const edges = useCanvasStore((s) => s.edges);
     const isBidirectionalEdge = edges.some(e => (e.source === target && e.target === source) || (e.target === source && e.source === target));
-
     const [edgePath, labelX, labelY] = isBidirectionalEdge
         ? getSpecialPath({ sourceX, sourceY, targetX, targetY }, sourceX < targetX ? 35 : -35)
         : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
@@ -49,7 +48,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                         position: 'absolute',
                         transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
                     }}
-                    className="nodrag nopan"
+                    className="nodrag nopan cursor-pointer px-2 py-1"
                 >
                     <span>0 SOL</span>
                 </div>
