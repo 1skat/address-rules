@@ -21,45 +21,8 @@ export const WalletNode = memo(({ id, data }: NodeProps) => {
         <div onMouseEnter={onMouseEnterDelete} className="flex items-center gap-2 bg-gray-400 p-2 shadow border">
             <Handle type="source" position={Position.Left} id="left" />
             <img src={SolLogo} alt="SOL" className="w-4 h-4" />
-            {data.label}
+            {data.shortAddress}
             <Handle type="source" position={Position.Right} id="right" />
         </div >
     );
-    // return (
-    //     <div onMouseEnter={onMouseEnter} className="flex items-center gap-2 bg-gray-400 p-2 shadow border">
-    //         <Handle
-    //             type="target"
-    //             position={Position.Left}
-    //             className="w-1 h-2.5"
-    //             id="target-left"
-    //             style={{ top: "50%" }}
-
-    //         />
-    //         <Handle
-    //             type="source"
-    //             position={Position.Left}
-    //             className="w-1 h-2.5"
-    //             id="source-left"
-    //             style={{ top: "50%" }}
-
-    //         />
-    //         <img src={SolLogo} alt="SOL" className="w-4 h-4" />
-    //         {data.label}
-    //         <Handle
-    //             type="target"
-    //             position={Position.Right}
-    //             className="w-1 h-2.5"
-    //             id="target-right"
-    //             style={{ top: "50%" }}
-
-    //         />
-    //         <Handle
-    //             type="source"
-    //             position={Position.Right}
-    //             className="w-1 h-2.5"
-    //             id="source-right"
-    //             style={{ top: "50%" }}
-    //         />
-    //     </div >
-    // )
 });

@@ -1,9 +1,9 @@
 import { memo, useState } from "react";
-import { useCanvasStore } from "../../store/useCanvasStore";
 import { Panel } from "@xyflow/react";
+import { useToolStore } from "../../store/useToolStore";
 
 export const SettingsCard = memo(() => {
-    const activeTool = useCanvasStore(s => s.activeTool);
+    const activeTool = useToolStore(s => s.activeTool);
 
     if (activeTool === "add") return <AddNodeCard />;
     // if (activeTool === "cursor") return <CursorCard />;

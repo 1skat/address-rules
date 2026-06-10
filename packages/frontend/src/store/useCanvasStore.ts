@@ -9,6 +9,8 @@ type CanvasStore = {
     removeNode: (id: string) => void;
     removeEdge: (id: string) => void;
     edges: Edge[];
+    selectedEdge: Edge | null;
+    setSelectedEdge: (edge: Edge | null) => void;
     setEdges: (change: any) => void;
     addConnection: (connection: Connection) => void;
     reconnectEdge: (oldEdge: Edge, newConnection: Connection) => void;
@@ -19,6 +21,7 @@ export const useCanvasStore = create<CanvasStore>()(
         (set) => ({
             nodes: [],
             edges: [],
+            selectedEdge: null,
             setNodes: (change) => set((s) => ({ nodes: applyNodeChanges(change, s.nodes) })), // update the eniter array
             addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
             removeNode: (id: string) => set((s) => ({
@@ -36,10 +39,15 @@ export const useCanvasStore = create<CanvasStore>()(
                 }, s.edges)
             })),
             setEdges: (change) => set((s) => ({ edges: applyEdgeChanges(change, s.edges) })),
+            setSelectedEdge: (edge: Edge | null) => set({ selectedEdge: edge }),
             reconnectEdge: (oldEdge: Edge, newConnection: Connection) => set((s) => ({
                 edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
             })),
         }),
-        { name: "canvas-store" }
+        {
+            name: "canvas-store",
+            partialize: (s) => ({ nodes: s.nodes, edges: s.edges })
+        }
+
     )
 );

@@ -1,18 +1,19 @@
-import { ReactFlow, Background, useReactFlow, ReactFlowProvider, type Viewport, ConnectionMode, type Edge, useNodeConnections } from '@xyflow/react';
+import { ReactFlow, Background, useReactFlow, ReactFlowProvider, type Viewport, ConnectionMode } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
-import React, { act, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
 import { useCanvasStore } from '../../store/useCanvasStore';
 import { WalletNode } from '../walletNode';
 import { getStoredViewport, saveViewport } from '../../store/canvasViewport';
 import { throttle } from '../utils/throttle';
-import { SettingsCard } from './settingsCard';
 import { createWallet } from '../../api/client';
 import { WalletEdge } from '../walletEdge';
 import { ConnectionLine } from '../connectionLine';
 import { useToolStore } from '../../store/useToolStore';
 import { useNodeInteraction } from '../../hooks/useNodeInteractions';
 import { useEdgeInteraction } from '../../hooks/useEdgeInteractions';
+import { SendSolanaTxCard } from './SendTxCard';
+import { SettingsCard } from './settingsCard';
 
 export const WalletCanvas = () => {
     return (
@@ -49,9 +50,9 @@ const WalletCanvasInner = () => {
     const addConnection = useCanvasStore(s => s.addConnection);
     const setEdges = useCanvasStore(s => s.setEdges);
     const { onNodeMouseEnter } = useNodeInteraction();
-    const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd } = useEdgeInteraction();
+    const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick } = useEdgeInteraction();
 
-
+    // todo move to node hooks
     const onPaneClick = useCallback(async (e: React.MouseEvent) => {
         if (activeTool !== "add") return;
 
@@ -66,7 +67,11 @@ const WalletCanvasInner = () => {
                 id: newWallet.id,
                 type: "wallet",
                 position: mousePosition,
-                data: { label: newWallet.alias ?? newWallet.address.slice(0, 5) + "..." + newWallet.address.slice(-4) },
+                data: {
+                    address: newWallet.address,
+                    alias: newWallet.alias,
+                    shortAddress: newWallet.address.slice(0, 5) + "..." + newWallet.address.slice(-4)
+                },
             });
         } catch (err) {
             console.error(`ERROR adding wallet: ${err}`);
@@ -95,6 +100,7 @@ const WalletCanvasInner = () => {
                 onReconnectStart={onReconnectStart}
                 onReconnect={onReconnect}
                 onReconnectEnd={onReconnectEnd}
+                onEdgeClick={onEdgeClick}
                 onPaneClick={onPaneClick}
                 panOnDrag={activeTool === "hand"}
                 selectionOnDrag={activeTool === "cursor"}
@@ -105,6 +111,7 @@ const WalletCanvasInner = () => {
             >
                 <Background variant='dots' />
                 <CanvasToolbar />
+                <SendSolanaTxCard />
                 <SettingsCard />
             </ReactFlow>
         </div >
