@@ -21,25 +21,23 @@ export const SendSolanaTxCard = () => {
     const fromNode = nodes.find(n => n.id === selectedEdge.source);
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
-    const onClickHandler = async () => {
-        try {
-            setPending(true)
-            if (amount <= 0n) return;
+    // const onClickHandler = async () => {
+    //     try {
+    //         setPending(true)
+    //         if (amount <= 0n) return;
 
-            const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
-            const toAddress = address(toNode?.data.address)
+    //         const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
+    //         const toAddress = address(toNode?.data.address)
 
-            const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount)
-            const sig = await sendSolanaTx(tx)
-            console.log(sig)
+    //         const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount)
+    //         const sig = await sendSolanaTx(tx)
+    //     } catch (err) {
+    //         setErr(err)
 
-        } catch (err) {
-            setErr(err)
-
-        } finally {
-            setPending(false)
-        }
-    }
+    //     } finally {
+    //         setPending(false)
+    //     }
+    // }
 
     return (
         <Panel className="absolute left">
@@ -57,7 +55,7 @@ export const SendSolanaTxCard = () => {
                     </label>
                     <label className="flex gap-1">
                         <span>To</span>
-                        <span>{shortFormat(toNode?.data.shortAddress)}</span>
+                        <span>{shortFormat(toNode?.data.address)}</span>
                     </label>
                 </div>
             </div>

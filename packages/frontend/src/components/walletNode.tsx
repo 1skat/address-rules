@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import SolLogo from "../assets/chains/solana.svg"
 import { useToolStore } from "../store/useToolStore";
 import { shortFormat } from "../lib/utils";
+// import { shortFormat } from "../lib/utils";
 
 export const WalletNode = memo(({ id, data }: NodeProps) => {
     const removeNode = useCanvasStore(s => s.removeNode);

@@ -63,6 +63,7 @@ const WalletCanvasInner = () => {
 
         try {
             const newWallet = await createWallet("501", null, mousePosition);
+            console.log(newWallet)
             addNode({
                 id: newWallet.id,
                 type: "wallet",

@@ -1,8 +1,8 @@
-import { createKeyPairFromBytes, createKeyPairSignerFromBytes, getAddressFromPublicKey, type KeyPairSigner } from "@solana/kit";
-import { getSeed, wipeSeed } from "./seed"
+import { createKeyPairFromPrivateKeyBytes, createKeyPairSignerFromBytes, getAddressFromPublicKey, type Address, type KeyPairSigner } from "@solana/kit";
+import { getSeed } from "./seed"
 import { HDKey } from '@scure/bip32'
 
-const deriveSolanaWallet = async (seed: Buffer, idx: number): Promise<string> => {
+const deriveSolanaWallet = async (seed: Buffer, idx: number): Promise<Address> => {
     const root = HDKey.fromMasterSeed(seed);
     const child = root.derive(`m/44'/501'/${idx}'/0`);
 
@@ -10,7 +10,7 @@ const deriveSolanaWallet = async (seed: Buffer, idx: number): Promise<string> =>
         throw new Error("Failed to derive key");
     }
 
-    return await createKeyPairFromBytes(child.privateKey).then(kp => getAddressFromPublicKey(kp.publicKey))
+    return await createKeyPairFromPrivateKeyBytes(child.privateKey).then(kp => getAddressFromPublicKey(kp.publicKey))
 }
 
 const deriveSolanaKepair = async (seed: Buffer, idx: number): Promise<KeyPairSigner> => {
@@ -25,31 +25,21 @@ const deriveSolanaKepair = async (seed: Buffer, idx: number): Promise<KeyPairSig
 }
 
 export const deriveWallet = (chainId: string, nextDerivationIdx: number) => {
-    try {
-        const seed = getSeed()
-        if (!seed) throw new Error("Vault is locked");
+    const seed = getSeed()
+    if (!seed) throw new Error("Vault is locked");
 
-        switch (chainId) {
-            case "501": return deriveSolanaWallet(seed, nextDerivationIdx);
-            default: throw new Error("unsupported chain");
-        }
-    } finally {
-        wipeSeed()
+    switch (chainId) {
+        case "501": return deriveSolanaWallet(seed, nextDerivationIdx);
+        default: throw new Error("unsupported chain");
     }
 }
 
 export const deriveKeypair = (chainId: string, nextDerivationIdx: number) => {
-    try {
-        const seed = getSeed()
-        if (!seed) throw new Error("Vault is locked");
+    const seed = getSeed()
+    if (!seed) throw new Error("Vault is locked");
 
-        switch (chainId) {
-            case "501": return deriveSolanaKepair(seed, nextDerivationIdx);
-            default: throw new Error("unsupported chain");
-        }
-    } finally {
-        wipeSeed()
+    switch (chainId) {
+        case "501": return deriveSolanaKepair(seed, nextDerivationIdx);
+        default: throw new Error("unsupported chain");
     }
 }
-
-

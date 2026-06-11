@@ -178,6 +178,7 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 });
 
 app.post("/wallets", authenticate, async (req, res) => {
+    console.log(req.user.sub)
     const { address, derivationIndex, alias, chain, posX, posY } = req.body;
     try {
         const [wallet] = await sql`
@@ -196,7 +197,8 @@ app.post("/wallets", authenticate, async (req, res) => {
         return res.status(201).json(wallet);
     } catch (err) {
         if (err.code === "23505") {
-            return res.status(409).json("address already exists")
+
+            return res.status(409).json(`address already exists: ${err}`)
         }
 
         return res.status(500).json(err.message)

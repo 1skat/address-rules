@@ -5,6 +5,7 @@ import { clearMnemonic } from "../lib/vault";
 import { deriveWallet } from "../lib/bip39";
 import type { XYPosition } from "@xyflow/react";
 import type { Base64EncodedWireTransaction, Blockhash, Signature } from "@solana/kit"
+import { wipeSeed } from "../lib/seed";
 
 const BASE_URL = "http://localhost:3000"
 
@@ -90,6 +91,7 @@ export const logout = async () => {
         await clearMnemonic()
         useAuthStore.getState().clearAuth();
         useOnbordingStore.getState().setStep("unauthenticated");
+        wipeSeed()
     }
 }
 
@@ -99,7 +101,7 @@ export const createWallet = async (chainCode: string, alias: string | null, posi
             method: "GET",
         }).then(resp => resp.json());
 
-        const walletAddress = deriveWallet(chainCode, nextIndex);
+        const walletAddress = await deriveWallet(chainCode, nextIndex);
 
         return await apiFetch("/wallets", {
             method: "POST",
