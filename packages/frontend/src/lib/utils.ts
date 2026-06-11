@@ -9,3 +9,12 @@ export const generateIndecies = () => {
     return out;
 }
 
+export const shortFormat = (address: string) => (address.slice(0, 5) + "..." + address.slice(-4));
+
+export const solToLamport = (sol: string) => {
+    const [whole, decimal = ""] = sol.split(".")
+    const padded = (decimal + "000000000").slice(0, 9)
+
+    return BigInt(whole + padded);
+}
+

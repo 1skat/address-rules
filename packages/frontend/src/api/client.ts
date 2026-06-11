@@ -100,6 +100,7 @@ export const createWallet = async (chainCode: string, alias: string | null, posi
         }).then(resp => resp.json());
 
         const walletAddress = deriveWallet(chainCode, nextIndex);
+
         return await apiFetch("/wallets", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
