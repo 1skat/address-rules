@@ -12,6 +12,7 @@ import { verifySignIn } from '@solana/wallet-standard-util';
 import { cfg } from "@/config.js"
 import { authenticate, isValidRT } from './middleware/authenticate.js';
 import cookieParser from "cookie-parser";
+import txRouter from './transactions.js';
 
 export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -42,6 +43,8 @@ const sessionCache = new LRUCache<string, boolean>({
     max: 100,
     ttl: 2 * 60_000,
 });
+
+app.use("/transactions", txRouter)
 
 app.post("/account/logout", authenticate, async (req, res) => {
     await redis.zRem(`user_sessions:${req.user.sub}`, req.user.parent_id);
@@ -231,7 +234,6 @@ app.use((err, req, res, next) => {
         error: "Internal error: " + err.message // remove the err in prod
     })
 });
-
 
 app.listen(3000);
 console.log("Express server is running on port 3000")

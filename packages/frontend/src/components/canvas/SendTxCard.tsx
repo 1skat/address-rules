@@ -7,6 +7,7 @@ import { buildSolanaTransaction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address } from "@solana/kit";
 import { sendSolanaTx } from "../../api/client";
+import { AddressLabel } from "../AddressLabel";
 
 export const SendSolanaTxCard = () => {
     const activeTool = useToolStore(s => s.activeTool);
@@ -15,29 +16,35 @@ export const SendSolanaTxCard = () => {
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
     const [err, setErr] = useState<Error | null>(null);
+    const [show, setShow] = useState(false);
+
 
     if (activeTool !== "cursor" || !selectedEdge) return null;
 
     const fromNode = nodes.find(n => n.id === selectedEdge.source);
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
-    // const onClickHandler = async () => {
-    //     try {
-    //         setPending(true)
-    //         if (amount <= 0n) return;
+    const onClickHandler = async () => {
+        try {
+            setPending(true)
+            if (amount <= 0n) {
+                setErr(new Error("Invalid amount"));
+                return;
+            };
 
-    //         const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
-    //         const toAddress = address(toNode?.data.address)
+            const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
+            const toAddress = address(toNode?.data.address)
 
-    //         const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount)
-    //         const sig = await sendSolanaTx(tx)
-    //     } catch (err) {
-    //         setErr(err)
+            const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount)
+            const sig = await sendSolanaTx(tx)
+            console.log("SIGNATURE", sig)
+        } catch (err) {
+            setErr(err)
 
-    //     } finally {
-    //         setPending(false)
-    //     }
-    // }
+        } finally {
+            setPending(false)
+        }
+    }
 
     return (
         <Panel className="absolute left">
@@ -46,16 +53,19 @@ export const SendSolanaTxCard = () => {
                     <span>Amount</span>
                     <input type="number" onChange={(e) => setAmount(solToLamport(e.target.value))} />
                 </label>
-                <button className="bg-amber-500 hover:bg-amber-600 p-1 " disabled={pending}>Send</button>
+                <button className="bg-amber-500 hover:bg-amber-600 p-1 " disabled={pending} onClick={onClickHandler}>Send</button>
+                {err && <p className="bg-red-700"> {err.message}</p>}
                 <hr className="m-2" />
                 <div className="bg-amber-200">
                     <label className="flex gap-1">
                         <span>From</span>
-                        <span>{shortFormat(fromNode?.data.address)}</span>
+                        <AddressLabel address={fromNode?.data.address} />
+                        {/* <span>{shortFormat(fromNode?.data.address)}</span> */}
                     </label>
                     <label className="flex gap-1">
                         <span>To</span>
-                        <span>{shortFormat(toNode?.data.address)}</span>
+                        <AddressLabel address={toNode?.data.address} />
+                        {/* <span>{shortFormat(toNode?.data.address)}</span> */}
                     </label>
                 </div>
             </div>

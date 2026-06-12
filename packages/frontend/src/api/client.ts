@@ -139,7 +139,10 @@ export const getBlockhash = async (): Promise<Readonly<{
     const resp = await fetch(`${BASE_URL}/transactions/blockhash`, {
         method: "GET"
     })
-    return await resp.json();
+    return await resp.json().then(d => ({
+        blockhash: d.blockhash,
+        lastValidBlockHeight: BigInt(d.lastValidBlockHeight),
+    }));
 }
 
 export const sendSolanaTx = async (signedTx: Base64EncodedWireTransaction): Promise<Signature> => {

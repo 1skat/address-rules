@@ -1,4 +1,4 @@
-import { createKeyPairFromPrivateKeyBytes, createKeyPairSignerFromBytes, getAddressFromPublicKey, type Address, type KeyPairSigner } from "@solana/kit";
+import { createKeyPairFromPrivateKeyBytes, createKeyPairSignerFromBytes, createKeyPairSignerFromPrivateKeyBytes, getAddressFromPublicKey, type Address, type KeyPairSigner } from "@solana/kit";
 import { getSeed } from "./seed"
 import { HDKey } from '@scure/bip32'
 
@@ -17,12 +17,23 @@ const deriveSolanaKepair = async (seed: Buffer, idx: number): Promise<KeyPairSig
     const root = HDKey.fromMasterSeed(seed);
     const child = root.derive(`m/44'/501'/${idx}'/0`);
 
-    if (!child.privateKey) {
+    if (!child.privateKey || !child.publicKey) {
         throw new Error("Failed to derive key");
     }
 
-    return await createKeyPairSignerFromBytes(child.privateKey);
+    return await createKeyPairSignerFromPrivateKeyBytes(child.privateKey); // needs pubkey + privkey
 }
+
+// const deriveSolanaKepairV2 = async (seed: Buffer, idx: number): Promise<CryptoKeyPair> => {
+//     const root = HDKey.fromMasterSeed(seed);
+//     const child = root.derive(`m/44'/501'/${idx}'/0`);
+
+//     if (!child.privateKey) {
+//         throw new Error("Failed to derive key");
+//     }
+
+//     return await createKeyPairFromPrivateKeyBytes(child.privateKey); // needs pubkey + privkey
+// }
 
 export const deriveWallet = (chainId: string, nextDerivationIdx: number) => {
     const seed = getSeed()
@@ -39,7 +50,9 @@ export const deriveKeypair = (chainId: string, nextDerivationIdx: number) => {
     if (!seed) throw new Error("Vault is locked");
 
     switch (chainId) {
-        case "501": return deriveSolanaKepair(seed, nextDerivationIdx);
+        case "501": {
+            return deriveSolanaKepair(seed, nextDerivationIdx);
+        }
         default: throw new Error("unsupported chain");
     }
 }
