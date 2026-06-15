@@ -3,10 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { Layout } from './components/layout.tsx'
-import { useInitAuth } from './hooks/useAuth.ts'
+import { useConnectWs, useInitAuth } from './hooks/useAuth.ts'
 
 const Root = () => {
   useInitAuth();
+  useConnectWs();
   return (
     <Layout>
       <App />

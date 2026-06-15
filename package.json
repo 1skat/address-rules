@@ -16,9 +16,11 @@
     "dotenv": "^17.4.2",
     "idb": "^8.0.3",
     "redis": "^5.12.1",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.10"
+    "@types/cookie-parser": "^1.4.10",
+    "@types/ws": "^8.18.1"
   }
 }

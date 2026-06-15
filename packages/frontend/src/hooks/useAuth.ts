@@ -7,6 +7,7 @@ import { useOnbordingStore } from "../store/onboardingStore";
 import { useCallback, useEffect } from "react";
 import type { WalletName } from "@solana/wallet-adapter-base";
 import { checkMnemonicExists } from "../lib/vault";
+import { connectWs } from "../api/ws";
 
 export const useAuth = () => {
     const { wallet, connect, connected, select } = useWallet();
@@ -60,5 +61,11 @@ export const useInitAuth = () => {
                 useOnbordingStore.getState().setStep("unlock");
             }
         })();
+    }, [])
+}
+
+export const useConnectWs = () => {
+    useEffect(() => {
+        connectWs()
     }, [])
 }

@@ -2,7 +2,7 @@ import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
 import { useState } from "react";
 import { useCanvasStore } from "../../store/useCanvasStore";
-import { shortFormat, solToLamport } from "../../lib/utils";
+import { solToLamport } from "../../lib/utils";
 import { buildSolanaTransaction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address } from "@solana/kit";
@@ -50,8 +50,8 @@ export const SendSolanaTxCard = () => {
         <Panel className="absolute left">
             <div className="border p-2">
                 <label className="flex gap-1">
-                    <span>Amount</span>
-                    <input type="number" onChange={(e) => setAmount(solToLamport(e.target.value))} />
+                    <span>Total</span>
+                    <input type="number" className="border" placeholder="0" onChange={(e) => setAmount(solToLamport(e.target.value))} />
                 </label>
                 <button className="bg-amber-500 hover:bg-amber-600 p-1 " disabled={pending} onClick={onClickHandler}>Send</button>
                 {err && <p className="bg-red-700"> {err.message}</p>}

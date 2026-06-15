@@ -13,6 +13,8 @@ import { cfg } from "@/config.js"
 import { authenticate, isValidRT } from './middleware/authenticate.js';
 import cookieParser from "cookie-parser";
 import txRouter from './transactions.js';
+import http from 'http';
+import { initWs } from './stream.js';
 
 export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -235,7 +237,12 @@ app.use((err, req, res, next) => {
     })
 });
 
-app.listen(3000);
+
+const server = http.createServer(app);
+
+initWs(server)
+server.listen(3000);
+// app.listen(3000);
 console.log("Express server is running on port 3000")
 
 
