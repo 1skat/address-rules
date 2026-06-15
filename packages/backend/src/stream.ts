@@ -1,8 +1,8 @@
 import type { Server } from "http";
-import WebSocket, { WebSocketServer } from 'ws';
+import { WebSocketServer } from 'ws';
 import type { Db } from "./internal/db.js";
 import sql from "./internal/db.js";
-import { authenticate, verifyAuth } from "./middleware/authenticate.js";
+import { verifyAuth } from "./middleware/authenticate.js";
 import { getSignatureFromTransaction } from "@solana/kit";
 import { tryCatchAsync } from "./utils/try-catch.js";
 import { sendAndConfirmSolanaTransaction } from "./internal/rpc.js";
@@ -54,7 +54,7 @@ const sendTransaction = async (ctx: Context, id: string, data: any) => {
 
     if (txErr) {
         return ctx.pub({
-            id: crypto.randomUUID(),
+            id,
             status: 400,
             error: { code: "TX_FAIL", message: "Transaction failed" }
         })
@@ -62,7 +62,7 @@ const sendTransaction = async (ctx: Context, id: string, data: any) => {
     const signature = getSignatureFromTransaction(signedTx); // already finalized
 
     return ctx.pub({
-        id: crypto.randomUUID(),
+        id,
         status: 200,
         data: { txStatus: "finalized", signature }
     })
@@ -106,7 +106,7 @@ export function initWs(server: Server) {
                 return;
             }
 
-            await handler(ctx, msg.payload)
+            await handler(ctx, msg.id, msg.payload)
         })
         ws.on("error", (err) => {
             console.error(err)

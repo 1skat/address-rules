@@ -4,7 +4,6 @@ import { authenticate } from './middleware/authenticate.js';
 import sql from "@/internal/db.js"
 import { sendAndConfirmSolanaTransaction, solanaRpc } from './internal/rpc.js';
 import { getSignatureFromTransaction } from '@solana/kit';
-import { wsClient } from './internal/ws_client.js';
 
 const txRouter = Router();
 
