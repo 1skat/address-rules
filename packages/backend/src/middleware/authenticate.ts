@@ -32,14 +32,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
-export const verifyAuth = async (header: string) => { // used in express midleware and ws
-    const parts = header.split(" ");
-    if (parts.length !== 2 || parts[0] !== "Bearer" || !parts[1]) {
-        return null
-    }
-
-    const token = parts[1];
-
+export const verifyAuthToken = async (token: string) => { // todo: use it in express middleware
     const payload = jwt.verify(token, cfg.jwt.pubKey, {
         algorithms: ["ES256"],
         audience: "addressrules.xyz/access",

@@ -65,7 +65,10 @@ export const useInitAuth = () => {
 }
 
 export const useConnectWs = () => {
+    const token = useAuthStore(s => s.accessToken);
+
     useEffect(() => {
-        connectWs()
-    }, [])
+        if (!token) return;
+        connectWs(token)
+    }, [token])
 }

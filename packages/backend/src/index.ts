@@ -183,7 +183,6 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 });
 
 app.post("/wallets", authenticate, async (req, res) => {
-    console.log(req.user.sub)
     const { address, derivationIndex, alias, chain, posX, posY } = req.body;
     try {
         const [wallet] = await sql`
