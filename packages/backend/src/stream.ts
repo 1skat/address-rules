@@ -5,9 +5,10 @@ import { verifyAuthToken } from "./middleware/authenticate.js";
 import { getSignatureFromTransaction } from "@solana/kit";
 import { tryCatchAsync } from "./utils/try-catch.js";
 import { sendAndConfirmSolanaTransaction } from "./internal/rpc.js";
-import { wsClient, type WsClient } from "./ws_client.js";
+import { orderStatusStore, wsClient, type WsClient } from "./ws_client.js";
 import sql from "./internal/db.js";
 import { randomUUID } from "crypto";
+import { sendTransaction, subscribeOrderStatus } from "./stream/transactions.js";
 
 // type SocketResponseMsg =
 //     | {
@@ -24,11 +25,11 @@ import { randomUUID } from "crypto";
 //         }
 //     }
 
-type Context = {
+export type Context = {
     db: Db;
-    userId: string | null;
+    userId: string;
     wsClient: WsClient;
-    subscriptions: Map<any, any>;
+    subsriptions: Map<any, any>;
 }
 
 type SocketRequestMsg = {
@@ -40,62 +41,79 @@ type SocketRequestMsg = {
 
 type HandlerType = (ctx: Context, id: string, data: any) => void;
 
-const sendTransaction = (ctx: Context, id: string, data: any) => {
-    if (!ctx.userId) throw new Error()
+// const sendTransaction = (ctx: Context, id: string, data: any) => {
+//     const { signedTx } = data;
+//     const op = 9;
 
-    const { signedTx } = data;
-    const orderId = randomUUID();
-    console.log("order id", orderId);
+//     if (!signedTx) {
+//         return ctx.wsClient.pub(ctx.userId, {
+//             op,
+//             id,
+//             status: 400,
+//             error: { code: "MISSING_TX", message: "Transaction required" }
+//         });
+//     }
 
-    if (!signedTx) {
-        return ctx.wsClient.pub(ctx.userId, {
-            op: 9,
-            id,
-            status: 400,
-            error: { code: "MISSING_TX", message: "Transaction required" }
-        })
-    }
+//     const orderId = randomUUID();
+//     processTx(ctx, orderId, signedTx);
 
-    processTx(ctx, orderId, signedTx);
+//     // orderStatusStore.set(orderId, "EXECUTING");
 
-    return ctx.wsClient.pub(ctx.userId, {
-        op: 9,
-        id,
-        status: 200,
-        data: { orderId }
-    });
+//     return ctx.wsClient.pub(ctx.userId, {
+//         op,
+//         id,
+//         status: 200,
+//         data: { orderId }
+//     });
 
-    // const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
+// const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
 
-    // if (txErr) {
-    //     return ctx.wsClient.pub(ctx.userId, {
-    //         op,
-    //         id,
-    //         status: 400,
-    //         error: { code: "TX_FAIL", message: "Transaction failed" }
-    //     })
-    // }
-    // const signature = getSignatureFromTransaction(signedTx); // already finalized
+// if (txErr) {
+//     return ctx.wsClient.pub(ctx.userId, {
+//         op,
+//         id,
+//         status: 400,
+//         error: { code: "TX_FAIL", message: "Transaction failed" }
+//     })
+// }
+// const signature = getSignatureFromTransaction(signedTx); // already finalized
 
-    // return ctx.wsClient.pub(ctx.userId, {
-    //     op,
-    //     id,
-    //     status: 200,
-    //     data: { txStatus: "finalized", signature }
-    // })
-}
+// return ctx.wsClient.pub(ctx.userId, {
+//     op,
+//     id,
+//     status: 200,
+//     data: { txStatus: "finalized", signature }
+// })
+// }
 
-const processTx = async (ctx: Context, orderId: string, signedTx: any) => {
-    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
-}
+// const processTx = async (ctx: Context, orderId: string, signedTx: any) => {
+//     const op = 5;
+//     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
+
+//     if (txErr) {
+
+//         // no ws send just set and push
+//     }
+// }
+
+
+
+// const subscribeOrderStatus = async (ctx: Context, subId: string, payload: any) => {
+//     const op = 5;
+//     const { orderId } = payload;
+//     if (!orderId) return;
+
+//     ctx.wsClient.subcribe(ctx.userId, subId, orderId)
+
+// }
 
 const routes: Record<string, HandlerType> = {
     "/transactions/send": sendTransaction
 }
 
-// const subscriptionRoutes = {
-//     "/orders/subscribe-status": 
-// }
+const subscriptionRoutes = {
+    "/orders/subscribe-status": subscribeOrderStatus
+}
 
 const authenticateSocketConnection = async (authMsg: SocketRequestMsg) => {
     if (authMsg.route !== "/auth") throw new Error()
@@ -127,36 +145,41 @@ export function initWs(server: Server) {
         ws.on("message", async (raw) => {
             const msg: SocketRequestMsg = JSON.parse(raw.toString()) // use zod
 
-            switch (msg.op) {
-                case 1: {
-                    try {
-                        const payload = await authenticateSocketConnection(msg)
+            if (msg.op === 1) {
+                try {
+                    const payload = await authenticateSocketConnection(msg)
 
-                        ctx.userId = payload.sub;
-                        ctx.wsClient.sub(payload.sub, ws)
-                        ws.send(JSON.stringify({
-                            op: 2,
-                            id: msg.id,
-                            status: 200,
-                        }))
-                        clearTimeout(authTimeout)
-                        return;
-                    } catch {
-                        ws.send(JSON.stringify({
-                            op: 2,
-                            id: msg.id,
-                            status: 401,
-                            error: {
-                                code: "UNAUTHENTICATED"
-                            }
-                        }))
-                        ws.close(4001, "Unauthorized")
-                        return;
-                    }
+                    ctx.userId = payload.sub;
+                    ctx.wsClient.regiter(payload.sub, ws)
+                    ws.send(JSON.stringify({
+                        op: 2,
+                        id: msg.id,
+                        status: 200,
+                    }))
+                    clearTimeout(authTimeout)
+                    return;
+                } catch {
+                    ws.send(JSON.stringify({
+                        op: 2,
+                        id: msg.id,
+                        status: 401,
+                        error: {
+                            code: "UNAUTHENTICATED"
+                        }
+                    }))
+                    ws.close(4001, "Unauthorized")
+                    return;
                 }
+            }
+
+            if (!ctx.userId) {
+                ws.send(JSON.stringify({ op: 9, id: msg.id, status: 401, error: { code: "UNAUTHENTICATED" } }));
+                return;
+            }
+
+            switch (msg.op) {
                 case 8: {
                     const handler = routes[msg.route]
-
                     if (!handler) {
                         ws.send(JSON.stringify({
                             op: 9,
@@ -169,7 +192,16 @@ export function initWs(server: Server) {
                     return;
                 }
                 case 4: {
-
+                    const handler = subscriptionRoutes[msg.route];
+                    if (!handler) {
+                        ws.send(JSON.stringify({
+                            op: 5,
+                            id: msg.id,
+                            status: 500,
+                        }));
+                        return;
+                    }
+                    await handler(ctx, msg.id, msg.payload)
                 }
             }
 
@@ -178,7 +210,7 @@ export function initWs(server: Server) {
             console.error(err)
         });
         ws.on("close", () => {
-            ctx.userId && ctx.wsClient.unsub(ctx.userId, ws);
+            ctx.userId && ctx.wsClient.remove(ctx.userId, ws);
             clearTimeout(authTimeout)
         });
     })

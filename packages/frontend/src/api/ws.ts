@@ -1,9 +1,8 @@
 import type { Base64EncodedWireTransaction } from "@solana/kit";
 import { useSocketStore } from "../store/useSocketStore";
-import { randomUUID } from "crypto";
 
 type SocketRequestMsg = {
-    op: 1 | 8;
+    op: 1 | 8 | 4;
     id: string;
     route: string;
     payload: any;
@@ -33,9 +32,12 @@ type PendingRequest = {
     reject: (err: Error) => void;
 }
 
+type OrderStatus = "EXECUTING" | "FILLED" | "EXECUTION_FAILED";
+
 let socket: WebSocket | null = null;
 let isAuthed: boolean = false;
 const pendingRequests = new Map<string, PendingRequest>();
+const activeSubscriptions = new Map<string, any>();
 
 export const connectWs = (token: string) => {
     if (socket && socket.readyState !== WebSocket.OPEN) return;
@@ -119,3 +121,25 @@ const sendWsMessage = (route: string, payload: object) => {
 
 export const sendSolanaTransaction = async (signedTx: Base64EncodedWireTransaction) =>
     sendWsMessage("/transactions/send", { signedTx });
+
+export const subscribeOrderStatus = async (orderId: string) => {
+    if (!socket || !isAuthed) {
+        throw new Error("WebSocket not ready");
+    }
+    const op = 4;
+    const subId = crypto.randomUUID();
+    activeSubscriptions.set(subId, {
+        onMessage: () => {
+            switch ()
+    }
+        })
+
+    const msg: SocketRequestMsg = {
+        op, // 4
+        id: subId,
+        route: "/orders/subscribe-status",
+        payload: { orderId }
+    }
+
+    socket.send(JSON.stringify(msg));
+}
