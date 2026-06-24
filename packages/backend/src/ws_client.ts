@@ -1,14 +1,18 @@
 import type WebSocket from "ws";
 
 const conns = new Map<string, Set<WebSocket>>(); // one user, multiple conns
+const subsriptions = new Map<any, any>();
+// order statuses
 
 type SocketResponseMsg =
     | {
+        op: 2 | 9
         id: string,
         status: 200
         data?: any
     }
     | {
+        op: 2 | 9
         id: string,
         status: 400 | 401 | 500
         error?: {
@@ -38,6 +42,14 @@ export const wsClient = {
             }
         }
     }
+}
+
+export const subsClient = {
+    sub: (subId: string, orderId: string) => {
+        subsriptions.set(subId, { orderId })
+        // const curr = 
+    }
+
 }
 
 export type WsClient = typeof wsClient;

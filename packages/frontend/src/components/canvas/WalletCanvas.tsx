@@ -5,7 +5,6 @@ import { CanvasToolbar } from './CanvasToolbar';
 import { useCanvasStore } from '../../store/useCanvasStore';
 import { WalletNode } from '../walletNode';
 import { getStoredViewport, saveViewport } from '../../store/canvasViewport';
-import { throttle } from '../utils/throttle';
 import { createWallet } from '../../api/client';
 import { WalletEdge } from '../walletEdge';
 import { ConnectionLine } from '../connectionLine';
@@ -13,7 +12,8 @@ import { useToolStore } from '../../store/useToolStore';
 import { useNodeInteraction } from '../../hooks/useNodeInteractions';
 import { useEdgeInteraction } from '../../hooks/useEdgeInteractions';
 import { SendSolanaTxCard } from './SendTxCard';
-import { SettingsCard } from './settingsCard';
+import { SettingsCard } from './SettingsCard';
+import { throttle } from '../../utils/throttle';
 
 export const WalletCanvas = () => {
     return (
@@ -32,7 +32,7 @@ const WalletCanvasInner = () => {
     const defaultViewport = useMemo(() => getStoredViewport(), []);
 
     const onMove = useMemo(
-        () => throttle((_: MouseEvent, viewport: Viewport) => {
+        () => throttle((_: MouseEvent, viewport: Viewport) => { // todo: a better way to hammer local storage?
             saveViewport(viewport);
         }, 100),
         []
@@ -61,9 +61,9 @@ const WalletCanvasInner = () => {
             y: e.clientY,
         });
 
+        // move to hooks
         try {
             const newWallet = await createWallet("501", null, mousePosition);
-            console.log(newWallet)
             addNode({
                 id: newWallet.id,
                 type: "wallet",

@@ -6,8 +6,8 @@ import { solToLamport } from "../../lib/utils";
 import { buildSolanaTransaction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address } from "@solana/kit";
-import { sendSolanaTx } from "../../api/client";
 import { AddressLabel } from "../AddressLabel";
+import { sendSolanaTransaction } from "../../api/ws";
 
 export const SendSolanaTxCard = () => {
     const activeTool = useToolStore(s => s.activeTool);
@@ -16,8 +16,7 @@ export const SendSolanaTxCard = () => {
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
     const [err, setErr] = useState<Error | null>(null);
-    const [show, setShow] = useState(false);
-
+    // const [show, setShow] = useState(false);
 
     if (activeTool !== "cursor" || !selectedEdge) return null;
 
@@ -35,9 +34,9 @@ export const SendSolanaTxCard = () => {
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address)
 
-            const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount)
-            const sig = await sendSolanaTx(tx)
-            console.log("SIGNATURE", sig)
+            const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount) // get a signature here locally
+            const orderId = await sendSolanaTransaction(tx)
+            console.log("ORDER-id:", orderId);
         } catch (err) {
             setErr(err)
 

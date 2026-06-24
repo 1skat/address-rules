@@ -7,6 +7,7 @@ import { tryCatchAsync } from "./utils/try-catch.js";
 import { sendAndConfirmSolanaTransaction } from "./internal/rpc.js";
 import { wsClient, type WsClient } from "./ws_client.js";
 import sql from "./internal/db.js";
+import { randomUUID } from "crypto";
 
 // type SocketResponseMsg =
 //     | {
@@ -27,54 +28,74 @@ type Context = {
     db: Db;
     userId: string | null;
     wsClient: WsClient;
+    subscriptions: Map<any, any>;
 }
 
 type SocketRequestMsg = {
-    id: string,
-    route: string,
-    payload: any
+    op: 1 | 8 | 4 | 6;
+    id: string;
+    route: string;
+    payload: any;
 }
 
-type HandlerType = (ctx: Context, id: string, data: any) => Promise<void>;
+type HandlerType = (ctx: Context, id: string, data: any) => void;
 
-const sendTransaction = async (ctx: Context, id: string, data: any) => {
+const sendTransaction = (ctx: Context, id: string, data: any) => {
+    if (!ctx.userId) throw new Error()
+
     const { signedTx } = data;
+    const orderId = randomUUID();
+    console.log("order id", orderId);
 
     if (!signedTx) {
-        return ctx.wsClient.pub(id, {
+        return ctx.wsClient.pub(ctx.userId, {
+            op: 9,
             id,
             status: 400,
             error: { code: "MISSING_TX", message: "Transaction required" }
         })
     }
 
-    ctx.wsClient.pub(id, {
+    processTx(ctx, orderId, signedTx);
+
+    return ctx.wsClient.pub(ctx.userId, {
+        op: 9,
         id,
         status: 200,
-        data: { txStatus: "pending" }
-    })
+        data: { orderId }
+    });
 
+    // const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
+
+    // if (txErr) {
+    //     return ctx.wsClient.pub(ctx.userId, {
+    //         op,
+    //         id,
+    //         status: 400,
+    //         error: { code: "TX_FAIL", message: "Transaction failed" }
+    //     })
+    // }
+    // const signature = getSignatureFromTransaction(signedTx); // already finalized
+
+    // return ctx.wsClient.pub(ctx.userId, {
+    //     op,
+    //     id,
+    //     status: 200,
+    //     data: { txStatus: "finalized", signature }
+    // })
+}
+
+const processTx = async (ctx: Context, orderId: string, signedTx: any) => {
     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
-
-    if (txErr) {
-        return ctx.wsClient.pub(id, {
-            id,
-            status: 400,
-            error: { code: "TX_FAIL", message: "Transaction failed" }
-        })
-    }
-    const signature = getSignatureFromTransaction(signedTx); // already finalized
-
-    return ctx.wsClient.pub(id, {
-        id,
-        status: 200,
-        data: { txStatus: "finalized", signature }
-    })
 }
 
 const routes: Record<string, HandlerType> = {
     "/transactions/send": sendTransaction
 }
+
+// const subscriptionRoutes = {
+//     "/orders/subscribe-status": 
+// }
 
 const authenticateSocketConnection = async (authMsg: SocketRequestMsg) => {
     if (authMsg.route !== "/auth") throw new Error()
@@ -96,6 +117,7 @@ export function initWs(server: Server) {
             db: sql,
             userId: null,
             wsClient,
+            subsriptions: new Map(),
         }
 
         const authTimeout = setTimeout(() => {
@@ -104,52 +126,61 @@ export function initWs(server: Server) {
 
         ws.on("message", async (raw) => {
             const msg: SocketRequestMsg = JSON.parse(raw.toString()) // use zod
-            console.log("RECEIVED:", msg)
 
-            if (!ctx.userId) {
-                try {
-                    const payload = await authenticateSocketConnection(msg)
+            switch (msg.op) {
+                case 1: {
+                    try {
+                        const payload = await authenticateSocketConnection(msg)
 
-                    ctx.userId = payload.sub;
-                    ctx.wsClient.sub(payload.sub, ws)
-                    ws.send(JSON.stringify({
-                        id: msg.id,
-                        status: 200,
-                    }))
-                    clearTimeout(authTimeout)
+                        ctx.userId = payload.sub;
+                        ctx.wsClient.sub(payload.sub, ws)
+                        ws.send(JSON.stringify({
+                            op: 2,
+                            id: msg.id,
+                            status: 200,
+                        }))
+                        clearTimeout(authTimeout)
+                        return;
+                    } catch {
+                        ws.send(JSON.stringify({
+                            op: 2,
+                            id: msg.id,
+                            status: 401,
+                            error: {
+                                code: "UNAUTHENTICATED"
+                            }
+                        }))
+                        ws.close(4001, "Unauthorized")
+                        return;
+                    }
+                }
+                case 8: {
+                    const handler = routes[msg.route]
+
+                    if (!handler) {
+                        ws.send(JSON.stringify({
+                            op: 9,
+                            id: msg.id,
+                            status: 500,
+                        }));
+                        return;
+                    }
+                    await handler(ctx, msg.id, msg.payload)
                     return;
-                } catch {
-                    ws.send(JSON.stringify({
-                        id: msg.id,
-                        status: 401,
-                        error: {
-                            code: "UNAUTHENTICATED"
-                        }
-                    }))
-                    ws.close(4001, "Unauthorized")
-                    return;
+                }
+                case 4: {
+
                 }
             }
 
-            const handler = routes[msg.route]
-
-            if (!handler) {
-                ws.send(JSON.stringify({
-                    id: msg.id,
-                    status: 500,
-                }));
-                return;
-            }
-
-            await handler(ctx, msg.id, msg.payload)
         });
         ws.on("error", (err) => {
             console.error(err)
-        })
+        });
         ws.on("close", () => {
             ctx.userId && ctx.wsClient.unsub(ctx.userId, ws);
             clearTimeout(authTimeout)
-        })
+        });
     })
 }
 
