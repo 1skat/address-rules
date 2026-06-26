@@ -63,10 +63,11 @@ export const sendTransaction = (ctx: Context, id: string, data: any) => {
 }
 
 export const processTx = async (ctx: Context, orderId: string, signedTx: any) => {
-    console.log("processTx -", orderId);
+    console.log("signed tx", signedTx);
     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
 
     if (txErr) {
+        console.log(txErr)
         return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: "INTERNAL_ERROR" } });
     }
 

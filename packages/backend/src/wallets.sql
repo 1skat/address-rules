@@ -4,11 +4,11 @@ CREATE TABLE wallets (
     address TEXT NOT NULL,
     derivation_index INTEGER NOT NULL,
     alias TEXT default NULL,
-    chain TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
     position_x FLOAT NOT NULL default 0,
     position_y FLOAT NOT NULL default 0,
     archived BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL default now(),
     UNIQUE (account_id, address),
-    UNIQUE (account_id, derivation_index)
+    UNIQUE (account_id, chain_id, derivation_index)
 );

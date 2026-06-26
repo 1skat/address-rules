@@ -97,7 +97,6 @@ app.post("/account/refresh-access-token", async (req, res) => {
 });
 
 app.post("/account/login-by-wallet/init", async (req, res) => {
-
     const { address, walletType, chain } = req.body; // zod
 
     const [_, invalid] = tryCatch(() => new PublicKey(address));
@@ -183,16 +182,16 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 });
 
 app.post("/wallets", authenticate, async (req, res) => {
-    const { address, derivationIndex, alias, chain, posX, posY } = req.body;
+    const { address, derivationIndex, alias, chainId, posX, posY } = req.body;
     try {
         const [wallet] = await sql`
-            INSERT INTO wallets (account_id, address, derivation_index, alias, chain, position_x, position_y)
+            INSERT INTO wallets (account_id, address, derivation_index, alias, chain_id, position_x, position_y)
             VALUES (
             ${req.user.sub},
             ${address},
             ${derivationIndex},
             ${alias},
-            ${chain},
+            ${chainId},
             ${posX},
             ${posY})
             RETURNING *
@@ -200,17 +199,17 @@ app.post("/wallets", authenticate, async (req, res) => {
 
         return res.status(201).json(wallet);
     } catch (err) {
-        if (err.code === "23505") {
-
-            return res.status(409).json(`address already exists: ${err}`)
-        }
-
+        if (err.code === "23505") return res.status(409).json(`address already exists: ${err}`);
         return res.status(500).json(err.message)
     }
 });
 
 app.get("/wallets/next-index", authenticate, async (req, res) => {
-    const [{ max }] = await sql`SELECT MAX(derivation_index) as max FROM wallets WHERE account_id = ${req.user.sub}`;
+    const { chainId } = req.query; // zod
+    if (!chainId) {
+        return res.status(401).json("chain required")
+    }
+    const [{ max }] = await sql`SELECT MAX(derivation_index) as max FROM wallets WHERE account_id = ${req.user.sub} AND chain_id = ${chainId} `;
 
     return res.status(200).json({ nextIndex: max === null ? 0 : max + 1 });
 })
