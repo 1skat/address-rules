@@ -7,7 +7,7 @@ import { buildSolanaTransaction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address } from "@solana/kit";
 import { AddressLabel } from "../AddressLabel";
-import { sendSolanaTransaction } from "../../api/ws";
+import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 
 export const SendSolanaTxCard = () => {
     const activeTool = useToolStore(s => s.activeTool);
@@ -35,8 +35,9 @@ export const SendSolanaTxCard = () => {
             const toAddress = address(toNode?.data.address)
 
             const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount) // get a signature here locally
-            const orderId = await sendSolanaTransaction(tx)
-            console.log("ORDER-id:", orderId);
+            const { orderId } = await sendSolanaTransaction(tx)
+            console.log("Order-Id:", orderId);
+            subscribeOrderStatus(orderId)
         } catch (err) {
             setErr(err)
 
