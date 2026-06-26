@@ -129,7 +129,6 @@ export function initWs(server: Server) {
             console.error(err)
         });
         ws.on("close", () => {
-            // console.log("triggered close", reason)
             ctx.userId && ctx.wsClient.unsub(ctx.userId, ws);
             clearTimeout(authTimeout)
         });

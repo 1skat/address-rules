@@ -27,7 +27,10 @@ type SocketResponseMsg =
         op: 7,
         id: string,
         status: 500,
-        error: Error
+        error?: {
+            code: string,
+            message?: string
+        }
     }
 
 type WsType = {
@@ -114,7 +117,6 @@ export const connectWs = (token: string) => {
                 break;
             }
             case 7:
-                // todo: add an error handler to each msg to update state?
                 console.log("ERROR", msg.error)
                 activeSubscriptions.delete(msg.id)
                 break;

@@ -1,7 +1,6 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import type { Context } from "@/stream.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
-import { time } from "node:console";
 
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
 type OrderStatus =
@@ -35,8 +34,6 @@ const orderStatusStore = {
 // helpers
 const setAndPushOrderStatus = (ctx: Context, orderId: string, status: OrderStatus): void => {
     orderStatusStore.set(orderId, status);
-    console.log("setAndPushOrderStatus -", orderId, status);
-    console.log("setAndPushOrderStatus - order status store:", orderStatusStore.store);
     ctx.subsClient.push(ctx.userId, orderId, status);
 }
 
@@ -49,7 +46,7 @@ export const sendTransaction = (ctx: Context, id: string, data: any) => {
             op,
             id,
             status: 400,
-            err: { code: "MISSING_TX", message: "Transaction required" }
+            error: { code: "MISSING_TX", message: "Transaction required" }
         });
     }
 
@@ -70,8 +67,7 @@ export const processTx = async (ctx: Context, orderId: string, signedTx: any) =>
     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
 
     if (txErr) {
-        console.log("tx error", txErr !== null)
-        return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: "INTERNAl_ERROR" } });
+        return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: "INTERNAL_ERROR" } });
     }
 
     return setAndPushOrderStatus(ctx, orderId, { ok: true, status: "FILLED" });
@@ -82,11 +78,8 @@ export const subscribeOrderStatus = async (ctx: Context, subId: string, payload:
     if (!orderId) return;
 
     ctx.subsClient.sub(ctx.userId, subId, orderId);
-    console.log("subscribeOrderStatus -", orderId);
 
     const status = orderStatusStore.get(orderId)
-    console.log("subscribeOrderStatus: curr status of orderid", status);
-    console.log("subscribeOrderStatus - order status store:", orderStatusStore.store);
 
     if (status) {
         if (status.ok) {

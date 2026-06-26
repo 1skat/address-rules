@@ -1,28 +1,26 @@
 import type WebSocket from "ws";
 
+type SocketError = {
+    code: string;
+    message?: string;
+}
 type SocketResponseMsg =
     | {
-        op: 2 | 9 | 5
-        id: string,
-        status: 200
-        data?: any
+        op: 2 | 9 | 5;
+        id: string;
+        status: 200;
+        data?: any;
     }
     | {
-        op: 2 | 9 | 5
-        id: string,
-        status: 400 | 401
-        err?: {
-            code: string,
-            message?: string
-        }
+        op: 2 | 9 | 5;
+        id: string;
+        status: 400 | 401;
+        error?: SocketError;
     } | {
-        op: 7,
-        id: string,
-        status: 500,
-        err?: {
-            code: string,
-            message?: string
-        }
+        op: 7;
+        id: string;
+        status: 500;
+        error?: SocketError;
     }
 
 const conns = new Map<string, Set<WebSocket>>();
@@ -63,7 +61,7 @@ export const subsClient = {
             }
         }
     },
-    pushErrAndDrop: (userId: string, topic: string, err: any) => {
+    pushErrAndDrop: (userId: string, topic: string, error: SocketError) => {
         const userSubs = subscriptions.get(userId);
         if (!userSubs) {
             console.log(`pushErr - userId: ${userId} not found, returning`)
@@ -76,7 +74,7 @@ export const subsClient = {
                     op: 7,
                     id: subId,
                     status: 500,
-                    err,
+                    error,
                 })
             }
             userSubs.delete(subId)
