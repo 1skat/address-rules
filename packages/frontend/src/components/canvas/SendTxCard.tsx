@@ -16,7 +16,6 @@ export const SendSolanaTxCard = () => {
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
     const [err, setErr] = useState<Error | null>(null);
-    // const [show, setShow] = useState(false);
 
     if (activeTool !== "cursor" || !selectedEdge) return null;
 
@@ -36,7 +35,6 @@ export const SendSolanaTxCard = () => {
 
             const tx = await buildSolanaTransaction(fromAddressKpSigner, toAddress, amount) // get a signature here locally
             const { orderId } = await sendSolanaTransaction(tx)
-            console.log("Order-Id:", orderId);
             subscribeOrderStatus(orderId)
         } catch (err) {
             setErr(err)

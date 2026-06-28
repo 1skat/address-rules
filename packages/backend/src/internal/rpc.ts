@@ -4,5 +4,3 @@ import { createSolanaRpc, createSolanaRpcSubscriptions, sendAndConfirmTransactio
 export const solanaRpc = createSolanaRpc(cfg.solana_rpc_http);
 export const solanaStream = createSolanaRpcSubscriptions(cfg.solana_rpc_ws);
 export const sendAndConfirmSolanaTransaction = sendAndConfirmTransactionFactory({ rpc: solanaRpc, rpcSubscriptions: solanaStream });
-
-// export default sendAndConfirmTransaction;

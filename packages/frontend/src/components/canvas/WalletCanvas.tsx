@@ -72,7 +72,7 @@ const WalletCanvasInner = () => {
                     address: newWallet.address,
                     alias: newWallet.alias,
                     derivationIndex: newWallet.derivation_index,
-                    chainId: newWallet.chain,
+                    chainId: newWallet.chain_id,
                 },
             });
         } catch (err) {

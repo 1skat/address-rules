@@ -110,6 +110,7 @@ export const connectWs = (token: string) => {
             case 5: {
                 if (msg.status === 200) {
                     const msgHandler = activeSubscriptions.get(msg.id); // callback msg handler
+                    console.log("msg data", msg.data);
                     if (msgHandler) msgHandler(msg.data);
                 } else {
                     activeSubscriptions.delete(msg.id);

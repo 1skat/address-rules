@@ -1,8 +1,14 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import type { Context } from "@/stream.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
+import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError } from "@solana/kit";
 
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
+type SignedTx = {
+    wireTx: string,
+    blockhash: Blockhash,
+    lastValidBlockHeight: string,
+}
 type OrderStatus =
     | { ok: true; status: "EXECUTING" | "FILLED" | "EXECUTION_FAILED" }
     | { ok: false; err: { code: string; message?: string } }
@@ -12,7 +18,7 @@ const orderStatusStore = {
     timers: new Map<string, NodeJS.Timeout>(),
 
     scheduleCleanup(orderId: string) {
-        if (this.timers.has(orderId)) this.timers.delete(orderId); // delete curr timer to avoid memort leaks
+        if (this.timers.has(orderId)) this.timers.delete(orderId);
 
         const timer = setTimeout(() => {
             this.store.delete(orderId)
@@ -34,7 +40,8 @@ const orderStatusStore = {
 // helpers
 const setAndPushOrderStatus = (ctx: Context, orderId: string, status: OrderStatus): void => {
     orderStatusStore.set(orderId, status);
-    ctx.subsClient.push(ctx.userId, orderId, status);
+    if (!status.ok) return ctx.subsClient.pushErrAndDrop(ctx.userId, orderId, status.err);
+    return ctx.subsClient.push(ctx.userId, orderId, status.status);
 }
 
 export const sendTransaction = (ctx: Context, id: string, data: any) => {
@@ -62,13 +69,24 @@ export const sendTransaction = (ctx: Context, id: string, data: any) => {
     });
 }
 
-export const processTx = async (ctx: Context, orderId: string, signedTx: any) => {
-    console.log("signed tx", signedTx);
-    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(signedTx, { commitment: "finalized" }));
+export const processTx = async (ctx: Context, orderId: string, signedTx: SignedTx) => {
+    // zod
+    const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
+    const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
+    const fullTx = {
+        ...decodedWireTx,
+        lifetimeConstraint: {
+            blockhash: signedTx.blockhash,
+            lastValidBlockHeight: BigInt(signedTx.lastValidBlockHeight),
+        }
+    }
+    assertIsFullySignedTransaction(fullTx);
+
+    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "finalized" }));
 
     if (txErr) {
-        console.log(txErr)
-        return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: "INTERNAL_ERROR" } });
+        const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
+        return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: errCode } });
     }
 
     return setAndPushOrderStatus(ctx, orderId, { ok: true, status: "FILLED" });

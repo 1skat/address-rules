@@ -97,24 +97,30 @@ export const logout = async () => {
 
 export const createWallet = async (chainCode: string, alias: string | null, position: XYPosition) => {
     try {
-        const { nextIndex } = await apiFetch("/wallets/next-index", {
-            method: "GET",
-        }).then(resp => resp.json());
+        while (true) {
+            const { nextIndex } = await apiFetch(`/wallets/next-index?chainId=${chainCode}`, {
+                method: "GET",
 
-        const walletAddress = await deriveWallet(chainCode, nextIndex);
+            }).then(resp => resp.json());
 
-        return await apiFetch("/wallets", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                address: walletAddress,
-                derivationIndex: nextIndex,
-                alias,
-                chain: chainCode,
-                posX: position.x,
-                posY: position.y,
-            })
-        }).then(resp => resp.json());
+            const walletAddress = await deriveWallet(chainCode, nextIndex);
+
+            const resp = await apiFetch("/wallets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    address: walletAddress,
+                    derivationIndex: nextIndex,
+                    alias,
+                    chainId: chainCode,
+                    posX: position.x,
+                    posY: position.y,
+                })
+            });
+            if (resp.status === 409) continue;
+
+            return resp.json()
+        }
     } catch (err) {
         console.error(err);
     }
