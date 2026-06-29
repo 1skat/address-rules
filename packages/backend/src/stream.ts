@@ -2,14 +2,11 @@ import type { Server } from "http";
 import { WebSocketServer } from 'ws';
 import type { Db } from "./internal/db.js";
 import { verifyAuthToken } from "./middleware/authenticate.js";
-import { getSignatureFromTransaction } from "@solana/kit";
-import { tryCatchAsync } from "./utils/try-catch.js";
-import { sendAndConfirmSolanaTransaction } from "./internal/rpc.js";
 import sql from "./internal/db.js";
-import { randomUUID } from "crypto";
 import { sendTransaction, subscribeOrderStatus } from "./socket/transactions.js";
 import type { SubsClient, WsClient } from "./ws_client.js";
 import { wsClient, subsClient } from "./ws_client.js";
+import { subscribeUserWallets } from "./socket/user_wallets.js";
 
 export type Context = {
     db: Db;
@@ -25,14 +22,15 @@ type SocketRequestMsg = {
     payload: any;
 }
 
-type HandlerType = (ctx: Context, id: string, data: any) => void;
+type HandlerType = (ctx: Context, id: string, data?: any) => void;
 
 const routes: Record<string, HandlerType> = {
     "/transactions/send": sendTransaction
 }
 
 const subscriptionRoutes = {
-    "/orders/subscribe-status": subscribeOrderStatus
+    "/orders/subscribe-status": subscribeOrderStatus,
+    "/wallets/subscribe-updates": subscribeUserWallets,
 }
 
 const authenticateSocketConnection = async (authMsg: SocketRequestMsg) => {
@@ -92,7 +90,7 @@ export function initWs(server: Server) {
                 }
             }
 
-            if (!ctx.userId) {
+            if (!ctx.userId) { // auth gate
                 ws.send(JSON.stringify({ op: 9, id: msg.id, status: 401, error: { code: "UNAUTHENTICATED" } }));
                 return;
             }

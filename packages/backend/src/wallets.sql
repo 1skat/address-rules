@@ -12,3 +12,14 @@ CREATE TABLE wallets (
     UNIQUE (account_id, address),
     UNIQUE (account_id, chain_id, derivation_index)
 );
+ 
+CREATE TABLE tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    symbol TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
+    address TEXT NOT NULL,
+    decimals INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    deployed_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL default now()
+);

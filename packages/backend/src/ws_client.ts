@@ -46,7 +46,7 @@ export const subsClient = {
     push: (userId: string, topic: string, topicData: any) => {
         const userSubs = subscriptions.get(userId);
         if (!userSubs) {
-            console.log(`push - userId: ${userId} not found, returning`)
+            console.log(`push - userId: ${userId} not found, returning`);
             return;
         }
 

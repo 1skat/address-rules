@@ -46,6 +46,10 @@ type PendingRequest = {
     reject: (err: Error) => void;
 }
 
+type CallbackHandler = {
+
+}
+
 const wsClient: WsType = {
     socket: null,
     isAuthed: false,
@@ -61,7 +65,7 @@ const wsClient: WsType = {
 
         this.socket.send(JSON.stringify(msg));
         return true;
-    }
+    },
 }
 const pendingRequests = new Map<string, PendingRequest>();
 const activeSubscriptions = new Map<string, (msg: any) => void>();
@@ -87,6 +91,10 @@ export const connectWs = (token: string) => {
         switch (msg.op) {
             case 2:
                 wsClient.isAuthed = true
+
+                // auto subscriptions
+                subscribeUserWalletUpdates();
+
                 pendingRequests.forEach((req, id) => { // replaying all the requests queued up before auth
                     if (req.isPending) {
                         req.sendCallback();
@@ -110,10 +118,9 @@ export const connectWs = (token: string) => {
             case 5: {
                 if (msg.status === 200) {
                     const msgHandler = activeSubscriptions.get(msg.id); // callback msg handler
-                    console.log("msg data", msg.data);
                     if (msgHandler) msgHandler(msg.data);
                 } else {
-                    activeSubscriptions.delete(msg.id);
+                    activeSubscriptions.delete(msg.id); // should probably try resubbing
                 }
                 break;
             }
@@ -158,6 +165,8 @@ const sendWsMessage = (route: string, payload: object) => {
 export const sendSolanaTransaction = async (signedTx: Base64EncodedWireTransaction) =>
     sendWsMessage("/transactions/send", { signedTx });
 
+// subscribeUserWalletUpdates
+
 export const subscribeOrderStatus = async (orderId: string) => {
     const subId = crypto.randomUUID();
     const route = "/orders/subscribe-status";
@@ -185,15 +194,57 @@ export const subscribeOrderStatus = async (orderId: string) => {
                 console.log("tx failed");
                 break;
             }
+            default:
+                console.log("unknown tx state");
+                break;
         }
     }
 
     activeSubscriptions.set(subId, handleMsg); // save callback for the 5-opcode
-
     wsClient.send({
         op: 4,
         id: subId,
         route,
         payload: { orderId },
     });
+}
+
+// const subscribeUserWalletUpdates = async (): Promise<void> => {
+//     const subId = crypto.randomUUID();
+//     const route = "/orders/subscribe-status";
+
+//     const unsubscribe
+// }
+
+const subscribeUserWalletUpdates = async (): Promise<void> => {
+    const subId = crypto.randomUUID();
+    const route = "/wallets/subscribe-updates";
+
+    // const unsubscribe = () => {
+    //     activeSubscriptions.delete(subId);
+    //     wsClient.send({
+    //         op: 6,
+    //         id: subId,
+    //         route,
+    //     });
+    // }
+
+    const handler = (msg: any) => {
+        switch (msg.type) {
+            case "init":
+                console.log("INIT", msg);
+                break;
+            case "update":
+                console.log("UPDATE", msg);
+                break;
+        }
+    }
+
+    activeSubscriptions.set(subId, handler);
+    wsClient.send({
+        op: 4,
+        id: subId,
+        route,
+    })
+
 }

@@ -15,6 +15,7 @@ import cookieParser from "cookie-parser";
 import txRouter from './transactions.js';
 import http from 'http';
 import { initWs } from './stream.js';
+import { initWalletStateTracker } from './chain_listener.js';
 
 export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -45,6 +46,8 @@ const sessionCache = new LRUCache<string, boolean>({
     max: 100,
     ttl: 2 * 60_000,
 });
+
+initWalletStateTracker();
 
 app.use("/transactions", txRouter)
 
