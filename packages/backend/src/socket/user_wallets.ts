@@ -1,5 +1,8 @@
+import { startTrackingAddress } from "@/chain_listener.js";
 import sql from "@/internal/db.js";
+import type { solanaRpc } from "@/internal/rpc.js";
 import type { Context } from "@/stream.js";
+import { subsClient } from "@/ws_client.js";
 
 // get the wallets
 // trigget update ack per wallet
@@ -14,21 +17,46 @@ type UserWalletInit = {
 
 type UserWalletUpdate = {
     type: "update"
+    tokenUpdates: [
+        {
+            chain: "SOLANA" | "ETHEREUM";
+            symbol: string;
+            name: string;
+            tokenAddress: string,
+            balance: BigInt,
+            decimals: 9
+        }
+    ]
 }
 
-export const subscribeUserWallets = async (ctx: Context, subId: string) => {
-    ctx.subsClient.sub(ctx.userId, subId, "WALLETS")
+type GetTranscationResult = NonNullable<Awaited<ReturnType<ReturnType<typeof solanaRpc.getTransaction>['send']>>>;
 
-    const userWallets = await sql`SELECT * FROM wallets WHERE account_id = ${ctx.userId} AND archived = false`;
+const parseUpdateBalance = (walletAddress: string, data: GetTranscationResult) => {
+
+}
+
+export const subscribeUserWallets = async (userId: string, subId: string) => {
+    subsClient.sub(userId, subId, "wallet_updates");
+
+    const userWallets = await sql`SELECT address FROM wallets WHERE account_id = ${userId} AND archived = false`;
     if (!userWallets) {
-        return ctx.subsClient.pushErrAndDrop(ctx.userId, subId, { code: "WALLETS_NOT_FOUND" });
+        return subsClient.pushErrAndDrop(userId, subId, { code: "WALLETS_NOT_FOUND" });
     }
+
+    userWallets.forEach(w => startTrackingAddress(userId, subId, w.address));
 
     const msg: UserWalletInit = {
         type: "init",
         snapshot: userWallets,
     }
-    return ctx.subsClient.push(ctx.userId, "WALLETS", msg);
+    return subsClient.push(userId, "wallet_updates", msg);
+}
+
+export const updateUserWalletState = async (userId: string, subId: string, data: any) => {
+
+    // const msg = {
+    //     type: 
+    // }
 }
 
 

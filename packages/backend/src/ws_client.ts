@@ -24,7 +24,7 @@ type SocketResponseMsg =
     }
 
 const conns = new Map<string, Set<WebSocket>>();
-const subscriptions = new Map<string, Map<string, object>>(); // Map<userId,Map<subId, topic>> where topic e.g orderId 
+const subscriptions = new Map<string, Map<string, { topic: string }>>(); // Map<userId,Map<subId, topic>> where topic e.g orderId 
 
 const pub = (userId: string, data: SocketResponseMsg) => {
     const socks = conns.get(userId);

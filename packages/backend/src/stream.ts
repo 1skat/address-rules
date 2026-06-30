@@ -2,10 +2,9 @@ import type { Server } from "http";
 import { WebSocketServer } from 'ws';
 import type { Db } from "./internal/db.js";
 import { verifyAuthToken } from "./middleware/authenticate.js";
-import sql from "./internal/db.js";
 import { sendTransaction, subscribeOrderStatus } from "./socket/transactions.js";
 import type { SubsClient, WsClient } from "./ws_client.js";
-import { wsClient, subsClient } from "./ws_client.js";
+import { subsClient, wsClient } from "./ws_client.js";
 import { subscribeUserWallets } from "./socket/user_wallets.js";
 
 export type Context = {
@@ -22,7 +21,7 @@ type SocketRequestMsg = {
     payload: any;
 }
 
-type HandlerType = (ctx: Context, id: string, data?: any) => void;
+type HandlerType = (userId: string, id: string, data?: any) => void;
 
 const routes: Record<string, HandlerType> = {
     "/transactions/send": sendTransaction
@@ -49,15 +48,10 @@ export function initWs(server: Server) {
     const wss = new WebSocketServer({ server })
 
     wss.on("connection", async (ws, req) => {
-        let ctx: Context = {
-            db: sql,
-            userId: null,
-            wsClient,
-            subsClient,
-        }
+        let userId: string | null = null;
 
         const authTimeout = setTimeout(() => {
-            if (!ctx.userId) ws.close(4001, "Timeout")
+            if (userId) ws.close(4001, "Timeout")
         }, 6000);
 
         ws.on("message", async (raw) => {
@@ -67,8 +61,8 @@ export function initWs(server: Server) {
                 try {
                     const payload = await authenticateSocketConnection(msg)
 
-                    ctx.userId = payload.sub;
-                    ctx.wsClient.sub(payload.sub, ws)
+                    userId = payload.sub;
+                    wsClient.sub(payload.sub, ws)
                     ws.send(JSON.stringify({
                         op: 2,
                         id: msg.id,
@@ -90,7 +84,7 @@ export function initWs(server: Server) {
                 }
             }
 
-            if (!ctx.userId) { // auth gate
+            if (!userId) { // auth gate
                 ws.send(JSON.stringify({ op: 9, id: msg.id, status: 401, error: { code: "UNAUTHENTICATED" } }));
                 return;
             }
@@ -105,7 +99,7 @@ export function initWs(server: Server) {
                             status: 500,
                         }));
                     }
-                    return handler(ctx, msg.id, msg.payload);
+                    return handler(userId, msg.id, msg.payload);
                 }
                 case 4: {
                     const handler = subscriptionRoutes[msg.route];
@@ -116,10 +110,10 @@ export function initWs(server: Server) {
                             status: 500,
                         }));
                     }
-                    return handler(ctx, msg.id, msg.payload);
+                    return handler(userId, msg.id, msg.payload);
                 }
                 case 6: {
-                    return ctx.subsClient.unsub(ctx.userId, msg.id);
+                    return subsClient.unsub(userId, msg.id);
                 }
             }
         });
@@ -127,7 +121,7 @@ export function initWs(server: Server) {
             console.error(err)
         });
         ws.on("close", () => {
-            ctx.userId && ctx.wsClient.unsub(ctx.userId, ws);
+            userId && wsClient.unsub(userId, ws);
             clearTimeout(authTimeout)
         });
     })

@@ -1,6 +1,7 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import type { Context } from "@/stream.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
+import { subsClient, wsClient } from "@/ws_client.js";
 import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError } from "@solana/kit";
 
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
@@ -38,18 +39,18 @@ const orderStatusStore = {
 }
 
 // helpers
-const setAndPushOrderStatus = (ctx: Context, orderId: string, status: OrderStatus): void => {
+const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderStatus): void => {
     orderStatusStore.set(orderId, status);
-    if (!status.ok) return ctx.subsClient.pushErrAndDrop(ctx.userId, orderId, status.err);
-    return ctx.subsClient.push(ctx.userId, orderId, status.status);
+    if (!status.ok) return subsClient.pushErrAndDrop(userId, orderId, status.err);
+    return subsClient.push(userId, orderId, status.status);
 }
 
-export const sendTransaction = (ctx: Context, id: string, data: any) => {
+export const sendTransaction = (userId: string, id: string, data: any) => {
     const { signedTx } = data;
     const op = 9;
 
     if (!signedTx) {
-        return ctx.wsClient.pub(ctx.userId, {
+        return wsClient.pub(userId, {
             op,
             id,
             status: 400,
@@ -58,18 +59,18 @@ export const sendTransaction = (ctx: Context, id: string, data: any) => {
     }
 
     const orderId = crypto.randomUUID();
-    setAndPushOrderStatus(ctx, orderId, { ok: true, status: "EXECUTING" });
-    processTx(ctx, orderId, signedTx);
+    setAndPushOrderStatus(userId, orderId, { ok: true, status: "EXECUTING" });
+    processTx(userId, orderId, signedTx);
 
-    return ctx.wsClient.pub(ctx.userId, {
+    return wsClient.pub(userId, {
         op,
         id,
         status: 200,
-        data: { orderId }
+        data: { orderId },
     });
 }
 
-export const processTx = async (ctx: Context, orderId: string, signedTx: SignedTx) => {
+export const processTx = async (userId: string, orderId: string, signedTx: SignedTx) => {
     // zod
     const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
     const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
@@ -86,25 +87,25 @@ export const processTx = async (ctx: Context, orderId: string, signedTx: SignedT
 
     if (txErr) {
         const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
-        return setAndPushOrderStatus(ctx, orderId, { ok: false, err: { code: errCode } });
+        return setAndPushOrderStatus(userId, orderId, { ok: false, err: { code: errCode } });
     }
 
-    return setAndPushOrderStatus(ctx, orderId, { ok: true, status: "FILLED" });
+    return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED" });
 }
 
-export const subscribeOrderStatus = async (ctx: Context, subId: string, payload: any) => {
+export const subscribeOrderStatus = async (userId: string, subId: string, payload: any) => {
     const { orderId } = payload;
     if (!orderId) return;
 
-    ctx.subsClient.sub(ctx.userId, subId, orderId);
+    subsClient.sub(userId, subId, orderId);
 
-    const status = orderStatusStore.get(orderId)
+    const status = orderStatusStore.get(orderId);
 
     if (status) {
         if (status.ok) {
-            return ctx.subsClient.push(ctx.userId, orderId, status.status);
+            return subsClient.push(userId, orderId, status.status);
         } else {
-            return ctx.subsClient.pushErrAndDrop(ctx.userId, orderId, status.err)
+            return subsClient.pushErrAndDrop(userId, orderId, status.err);
         }
     }
 }
