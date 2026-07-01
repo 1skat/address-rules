@@ -23,3 +23,9 @@ CREATE TABLE tokens (
     deployed_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL default now()
 );
+
+CREATE TABLE wallet_tokens (
+    wallet_id UUID REFERENCES wallets(id) on DELETE CASCADE,
+    token_id UUID REFERENCES tokens(id),
+    PRIMARY KEY (wallet_id, token_id)
+)

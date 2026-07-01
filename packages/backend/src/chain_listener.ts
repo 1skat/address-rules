@@ -2,16 +2,18 @@ import { solanaStream, solanaRpc } from "./internal/rpc.js";
 import { address, type Address, type Signature } from "@solana/kit";
 import util from "util";
 
-type WalletStateData = {
-    controller: AbortController;
-    userId: string;
-    subId: string;
+
+export const walletStore = new Map<Address, AbortController>();
+const processedSignatures = new Set<Signature>(); // set a ttl
+
+export const handleSignature = async (signature: Signature) => { // todo: make handle handle error with {code, message}
+    if (processedSignatures.has(signature)) return;
+    processedSignatures.add(signature);
+
+    return await solanaRpc.getTransaction(signature, { commitment: "confirmed", encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }).send();
 }
 
-const walletStore = new Map<Address, AbortController>();
-const sigsStore = new Set<Signature>(); // set a ttl
-
-export const startTrackingAddress = async (solanaAddress: string, logHandler: (walletAddres: Address, data: any) => void) => {
+export const startTrackingSolanaAddress = async (solanaAddress: string, dataHandler: (txData: any) => void) => {
     const walletAddress = address(solanaAddress); // can fail catch errs
     if (walletStore.has(walletAddress)) return;
 
@@ -24,37 +26,12 @@ export const startTrackingAddress = async (solanaAddress: string, logHandler: (w
 
     for await (const txLog of transactionLogs) {
         const sig = txLog.value.signature; // get a map -> to dedup, probably gonna set it inside the sendTransaction
-
-        if (sigsStore.has(sig)) {
-            console.log(walletAddress, "skipped")
-            continue;
+        const txData = handleSignature(sig)
+        if (!txData) {
+            console.error("no tx data");
+            return;
         }
-        const res = await solanaRpc.getTransaction(txLog.value.signature, { commitment: "confirmed", encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }).send();
-        logHandler(walletAddress, res);
+
+        dataHandler(txData);
     }
 }
-
-// export const initWalletStateTracker = async () => {  // runs at the start of the server
-//     await Promise.all(
-//         [...walletStore.entries().map(async ([walletAddress, subData]) => {
-//             const accountNotifications = await solanaStream
-//                 .accountNotifications(walletAddress, { commitment: "finalized" })
-//                 .subscribe({ abortSignal: subData.controller.signal });
-
-//             for await (const notification of accountNotifications) {
-
-//             }
-//         })]
-//     )
-// }
-
-// const startTracking = async (address: Address, subData: WalletStateData) => {
-//     const accountNotifications = await solanaStream
-//         .accountNotifications(address, { commitment: "finalized" })
-//         .subscribe({ abortSignal: subData.controller.signal });
-
-//     for await (const notification of accountNotifications) {
-
-//         updateUserWallet(subData.userId,)
-//     }
-// }
