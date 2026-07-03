@@ -46,9 +46,6 @@ type PendingRequest = {
     reject: (err: Error) => void;
 }
 
-type CallbackHandler = {
-
-}
 
 const wsClient: WsType = {
     socket: null,
@@ -232,10 +229,10 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
     const handler = (msg: any) => {
         switch (msg.type) {
             case "init":
-                console.log("INIT", msg);
+                console.log("INIT:", msg);
                 break;
             case "update":
-                console.log("UPDATE", msg);
+                console.log("UPDATE:", msg);
                 break;
         }
     }
@@ -246,5 +243,4 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
         id: subId,
         route,
     })
-
 }

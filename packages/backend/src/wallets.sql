@@ -15,17 +15,25 @@ CREATE TABLE wallets (
  
 CREATE TABLE tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    symbol TEXT NOT NULL,
     chain_id TEXT NOT NULL,
     address TEXT NOT NULL,
-    decimals INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
     name TEXT NOT NULL,
-    deployed_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL default now()
+    decimals INTEGER NOT NULL,
+    deployed_at TIMESTAMPTZ ,
+    created_at TIMESTAMPTZ NOT NULL default now(),
+    UNIQUE (chain_id, address)
 );
 
 CREATE TABLE wallet_tokens (
     wallet_id UUID REFERENCES wallets(id) on DELETE CASCADE,
     token_id UUID REFERENCES tokens(id),
     PRIMARY KEY (wallet_id, token_id)
-)
+);
+
+INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)  
+VALUES ('501', '11111111111111111111111111111111', 'SOL', 'Solana', 9, to_timestamp(1584658800));
+ 
+INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)  
+VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641)); -- devnet address
+

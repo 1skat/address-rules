@@ -185,7 +185,8 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 app.post("/wallets", authenticate, async (req, res) => {
     const { address, derivationIndex, alias, chainId, posX, posY } = req.body;
     try {
-        const [wallet] = await sql`
+        const wallet = await sql.begin(async sql => {
+            const [newWallet] = await sql`
             INSERT INTO wallets (account_id, address, derivation_index, alias, chain_id, position_x, position_y)
             VALUES (
             ${req.user.sub},
@@ -197,6 +198,21 @@ app.post("/wallets", authenticate, async (req, res) => {
             ${posY})
             RETURNING *
             `;
+            if (!newWallet) throw new Error("Insert wallet failed");
+
+            // add default Solana token to a fresh wallet
+            const [token] = await sql`
+            SELECT id FROM tokens WHERE chain_id = '501' AND address = '11111111111111111111111111111111'
+            `;
+            if (!token) throw new Error("Select token failed");
+
+            await sql`
+            INSERT INTO wallet_tokens (wallet_id, token_id)
+            VALUES (${newWallet.id}, ${token.id})
+            `;
+
+            return newWallet;
+        });
 
         return res.status(201).json(wallet);
     } catch (err) {

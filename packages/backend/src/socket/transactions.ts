@@ -41,8 +41,10 @@ const orderStatusStore = {
 // helpers
 const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderStatus): void => {
     orderStatusStore.set(orderId, status);
-    if (!status.ok) return subsClient.pushErrAndDrop(userId, orderId, status.err);
-    return subsClient.push(userId, orderId, status.status);
+    // if (!status.ok) return subsClient.pushErrAndDrop(userId, orderId, status.err);
+    // return subsClient.push(userId, orderId, status.status);
+    if (!status.ok) return subsClient.pushErrAndDrop(userId, "order_status", status.err);
+    return subsClient.push(userId, "order_status", status.status);
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
@@ -83,7 +85,7 @@ export const processTx = async (userId: string, orderId: string, signedTx: Signe
     }
     assertIsFullySignedTransaction(fullTx);
 
-    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "finalized" }));
+    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
     if (txErr) {
         const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
@@ -93,19 +95,39 @@ export const processTx = async (userId: string, orderId: string, signedTx: Signe
     return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED" });
 }
 
-export const subscribeOrderStatus = async (userId: string, subId: string, payload: any) => {
+// export const subscribeOrderStatus = async (userId: string, subId: string, payload: any) => {
+//     const { orderId } = payload;
+//     if (!orderId) return;
+
+//     subsClient.sub(userId, subId, orderId); // userId, subId, "order_status"
+
+//     const status = orderStatusStore.get(orderId);
+
+//     if (status) {
+//         if (status.ok) {
+//             // return subsClient.push(userId, orderId , status.status);
+//             return subsClient.push(userId, "order_status")
+//         } else {
+//             return subsClient.pushErrAndDrop(userId, orderId, status.err);
+//         }
+//     }
+// }
+
+export const ackSubscribedOrderStatus = async (userId: string, topic: string, payload: any) => {
     const { orderId } = payload;
     if (!orderId) return;
-
-    subsClient.sub(userId, subId, orderId);
 
     const status = orderStatusStore.get(orderId);
 
     if (status) {
         if (status.ok) {
-            return subsClient.push(userId, orderId, status.status);
+            // return subsClient.push(userId, orderId , status.status);
+            return subsClient.push(userId, topic, status.status);
         } else {
-            return subsClient.pushErrAndDrop(userId, orderId, status.err);
+            // return subsClient.pushErrAndDrop(userId, orderId, status.err);
+            return subsClient.pushErrAndDrop(userId, topic, status.err);
         }
     }
 }
+
+

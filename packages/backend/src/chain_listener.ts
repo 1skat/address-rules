@@ -14,6 +14,7 @@ export const handleSignature = async (signature: Signature) => { // todo: make h
 }
 
 export const startTrackingSolanaAddress = async (solanaAddress: string, dataHandler: (txData: any) => void) => {
+    console.log("start tracking", solanaAddress)
     const walletAddress = address(solanaAddress); // can fail catch errs
     if (walletStore.has(walletAddress)) return;
 
@@ -23,13 +24,15 @@ export const startTrackingSolanaAddress = async (solanaAddress: string, dataHand
     const transactionLogs = await solanaStream
         .logsNotifications({ mentions: [walletAddress] }, { commitment: "confirmed" })
         .subscribe({ abortSignal: controller.signal });
+    console.log("trabscationLogs:", transactionLogs);
 
     for await (const txLog of transactionLogs) {
         const sig = txLog.value.signature; // get a map -> to dedup, probably gonna set it inside the sendTransaction
+        console.log("signature", sig)
         const txData = handleSignature(sig)
         if (!txData) {
-            console.error("no tx data");
-            return;
+            console.log("already processed")
+            continue;
         }
 
         dataHandler(txData);

@@ -2,10 +2,10 @@ import type { Server } from "http";
 import { WebSocketServer } from 'ws';
 import type { Db } from "./internal/db.js";
 import { verifyAuthToken } from "./middleware/authenticate.js";
-import { sendTransaction, subscribeOrderStatus } from "./socket/transactions.js";
+import { ackSubscribedOrderStatus, sendTransaction } from "./socket/transactions.js";
 import type { SubsClient, WsClient } from "./ws_client.js";
 import { subsClient, wsClient } from "./ws_client.js";
-import { subscribeUserWallets } from "./socket/user_wallets.js";
+import { ackSubscribedUserWallets } from "./socket/user_wallets.js";
 
 export type Context = {
     db: Db;
@@ -28,8 +28,8 @@ const routes: Record<string, HandlerType> = {
 }
 
 const subscriptionRoutes = {
-    "/orders/subscribe-status": subscribeOrderStatus,
-    "/wallets/subscribe-updates": subscribeUserWallets,
+    "/orders/subscribe-status": { handler: ackSubscribedOrderStatus, topic: "order_status" },
+    "/wallets/subscribe-updates": { handler: ackSubscribedUserWallets, topic: "wallet_update" },
 }
 
 const authenticateSocketConnection = async (authMsg: SocketRequestMsg) => {
@@ -60,9 +60,9 @@ export function initWs(server: Server) {
             if (msg.op === 1) {
                 try {
                     const payload = await authenticateSocketConnection(msg)
-
                     userId = payload.sub;
-                    wsClient.sub(payload.sub, ws)
+
+                    wsClient.sub(userId, ws); // conns[userId] = ws
                     ws.send(JSON.stringify({
                         op: 2,
                         id: msg.id,
@@ -102,18 +102,20 @@ export function initWs(server: Server) {
                     return handler(userId, msg.id, msg.payload);
                 }
                 case 4: {
-                    const handler = subscriptionRoutes[msg.route];
-                    if (!handler) {
+                    const subRoute = subscriptionRoutes[msg.route];
+                    if (!subRoute) {
                         return ws.send(JSON.stringify({
                             op: 5,
                             id: msg.id,
                             status: 500,
                         }));
                     }
-                    return handler(userId, msg.id, msg.payload);
+                    const { handler, topic } = subRoute;
+                    subsClient.sub(ws, msg.id, topic) // subs<ws,<subId,topic>> 
+                    return handler(userId, topic, msg.payload); // e.g payload orderId = "wJHrkHh..."
                 }
                 case 6: {
-                    return subsClient.unsub(userId, msg.id);
+                    return subsClient.unsub(ws, msg.id);
                 }
             }
         });
@@ -122,6 +124,7 @@ export function initWs(server: Server) {
         });
         ws.on("close", () => {
             userId && wsClient.unsub(userId, ws);
+            subsClient.clear(ws)
             clearTimeout(authTimeout)
         });
     })

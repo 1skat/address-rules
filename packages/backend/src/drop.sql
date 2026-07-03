@@ -1,0 +1,3 @@
+DROP TABLE wallets CASCADE;
+DROP TABLE tokens CASCADE;
+DROP TABLE wallet_tokens CASCADE;
