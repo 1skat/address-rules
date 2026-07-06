@@ -97,12 +97,12 @@ const WalletCanvasInner = () => {
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={setNodes}
-                onEdgesChange={setEdges}
+                // onEdgesChange={setEdges} // todo: do i need it since i have addConnection
                 onConnect={addConnection}
                 onReconnectStart={onReconnectStart}
                 onReconnect={onReconnect}
                 onReconnectEnd={onReconnectEnd}
-                onEdgeClick={onEdgeClick}
+                onEdgeClick={onEdgeClick} // Edge gets passed as arg
                 onPaneClick={onPaneClick}
                 panOnDrag={activeTool === "hand"}
                 selectionOnDrag={activeTool === "cursor"}

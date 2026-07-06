@@ -1,22 +1,22 @@
 import React, { useCallback, useRef } from "react";
-import { useCanvasStore } from "../store/useCanvasStore";
+import { useCanvasStore, type TransactionEdge } from "../store/useCanvasStore";
 import { useToolStore } from "../store/useToolStore";
-import type { Connection, Edge } from "@xyflow/react";
+import type { Connection } from "@xyflow/react";
 
 export const useEdgeInteraction = () => {
     const removeEdge = useCanvasStore(s => s.removeEdge);
     const reconnectEdge = useCanvasStore(s => s.reconnectEdge);
-    const setSelectedEdge = useCanvasStore(s => s.setSelectedEdge)
+    const setSelectedEdge = useCanvasStore(s => s.setSelectedEdge);
     const edgeReconnectSuccessful = useRef(false);
 
-    const onEdgeMouseEnter = useCallback(async (ev: React.MouseEvent, edge: Edge) => {
+    const onEdgeMouseEnter = useCallback(async (ev: React.MouseEvent, edge: TransactionEdge) => {
         if (useToolStore.getState().activeTool !== "remove") return;
         if (ev.buttons !== 1) return;
 
         removeEdge(edge.id);
     }, [removeEdge]);
 
-    const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    const onEdgeClick = useCallback((_: React.MouseEvent, edge: TransactionEdge) => {
         if (useToolStore.getState().activeTool !== "cursor") return;
 
         setSelectedEdge(edge)
@@ -26,12 +26,12 @@ export const useEdgeInteraction = () => {
         edgeReconnectSuccessful.current = false;
     }, []);
 
-    const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
+    const onReconnect = useCallback((oldEdge: TransactionEdge, newConnection: Connection) => {
         edgeReconnectSuccessful.current = true;
         reconnectEdge(oldEdge, newConnection);
     }, [reconnectEdge])
 
-    const onReconnectEnd = useCallback((_, edge: Edge) => {
+    const onReconnectEnd = useCallback((_, edge: TransactionEdge) => {
         if (!edgeReconnectSuccessful.current) {
             removeEdge(edge.id)
             setSelectedEdge(null)

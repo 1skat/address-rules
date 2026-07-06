@@ -24,12 +24,11 @@ export const startTrackingSolanaAddress = async (solanaAddress: string, dataHand
     const transactionLogs = await solanaStream
         .logsNotifications({ mentions: [walletAddress] }, { commitment: "confirmed" })
         .subscribe({ abortSignal: controller.signal });
-    console.log("trabscationLogs:", transactionLogs);
 
     for await (const txLog of transactionLogs) {
         const sig = txLog.value.signature; // get a map -> to dedup, probably gonna set it inside the sendTransaction
         console.log("signature", sig)
-        const txData = handleSignature(sig)
+        const txData = await handleSignature(sig)
         if (!txData) {
             console.log("already processed")
             continue;
