@@ -1,16 +1,23 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
+import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
+
+export type TokenMeta = {
+    mint: string;
+    symbol: string;
+    name: string;
+    iconURI?: string;
+    decimals: number;
+}
 
 export type EdgeTransactionData = {
-    chain: "SOLANA" | "ETHEREUM";
-    tokenMeta: {
-        mint: string,
-        symbol: string,
-        name: string,
-        iconURI?: string,
-        decimals: number,
-    }
+    chainId: "501" | "60";
+    tokenMeta: TokenMeta;
+    amountInfo: {
+        amount: StringifiedBigInt,
+        uiAmount: string,
+    };
 }
 export type TransactionEdge = Edge<EdgeTransactionData>;
 
@@ -29,7 +36,6 @@ type CanvasStore = {
     setEdgeCurrency: (edgeId: string, data: EdgeTransactionData) => void;
 }
 
-
 export const useCanvasStore = create<CanvasStore>()(
     persist(
         (set) => ({
@@ -37,7 +43,11 @@ export const useCanvasStore = create<CanvasStore>()(
             edges: [],
             selectedEdge: null,
             setNodes: (change) => set((s) => ({ nodes: applyNodeChanges(change, s.nodes) })), // update the eniter array
-            addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
+            // addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
+            addNode: (node) => {
+                console.log("adding node", node);
+                set((s) => ({ nodes: [...s.nodes, node] }))
+            },
             removeNode: (id: string) => set((s) => ({
                 nodes: s.nodes.filter(n => n.id !== id),
                 edges: s.edges.filter(e => e.source !== id && e.target !== id)
@@ -47,22 +57,28 @@ export const useCanvasStore = create<CanvasStore>()(
                 set((s) => ({ edges: s.edges.filter(e => e.id !== id) }))
             },
             addConnection: (connection, data: EdgeTransactionData = {
-                chain: "SOLANA",
+                chainId: "501",
                 tokenMeta: {
                     mint: "11111111111111111111111111111111",
                     symbol: "SOL",
                     name: "Solana",
                     decimals: 9,
-                }
-            }/*default*/) => {
+                },
+                amountInfo: {
+                    amount: stringifiedBigInt(BigInt(0).toString()),
+                    uiAmount: "0",
+                },
+            }/*default*/) => { // remove default
                 console.log("adding connection:", connection);
-                set((s) => ({
-                    edges: addEdge<TransactionEdge>({
-                        ...connection,
-                        type: "wallet",
-                        data,
-                    }, s.edges)
-                }))
+                set((s) => {
+                    return {
+                        edges: addEdge<TransactionEdge>({
+                            ...connection,
+                            type: "wallet",
+                            data,
+                        }, s.edges)
+                    }
+                });
             },
             setEdges: (change) => set((s) => {
                 console.log("set edge change:", change)
@@ -77,7 +93,9 @@ export const useCanvasStore = create<CanvasStore>()(
             })),
             setEdgeCurrency: (edgeId: string, data: EdgeTransactionData) => {
                 set((s) => ({
+                    // update edge inside edges and selectedEdge
                     edges: s.edges.map((e) => e.id === edgeId ? { ...e, data } : e),
+                    selectedEdge: s.selectedEdge?.id === edgeId ? { ...s.selectedEdge, data } : s.selectedEdge,
                 }));
             },
         }),

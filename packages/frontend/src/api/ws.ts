@@ -129,11 +129,11 @@ export const connectWs = (token: string) => {
     }
 }
 
-const sendWsMessage = (route: string, payload: object) => {
+const sendWsMessage = async<T>(route: string, payload: object): Promise<T> => {
     const id = crypto.randomUUID();
 
     const sendNow = () => {
-        const pendingReq = pendingRequests.get(id)
+        const pendingReq = pendingRequests.get(id);
         if (!pendingReq) return;
 
         const sent = wsClient.send({
@@ -141,26 +141,30 @@ const sendWsMessage = (route: string, payload: object) => {
             id,
             route,
             payload,
-        })
+        });
         if (sent) pendingReq.isPending = false;
     }
 
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Promise<T>((resolve, reject) => {
         pendingRequests.set(id, {
             isPending: true,
             sendCallback: sendNow,
             resolve,
             reject,
-        })
-    })
+        });
+    });
 
     if (wsClient.socket && wsClient.isAuthed) sendNow();
 
     return promise;
 }
 
-export const sendSolanaTransaction = async (signedTx: Base64EncodedWireTransaction) =>
-    sendWsMessage("/transactions/send", { signedTx });
+export const sendSolanaTransaction = async (signedTx: {
+    wireTx: Base64EncodedWireTransaction;
+    blockhash: any;
+    lastValidBlockHeight: any;
+}) =>
+    sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx });
 
 // subscribeUserWalletUpdates
 

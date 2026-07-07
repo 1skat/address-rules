@@ -35,12 +35,12 @@ const deriveSolanaKepair = async (seed: Buffer, idx: number): Promise<KeyPairSig
 //     return await createKeyPairFromPrivateKeyBytes(child.privateKey); // needs pubkey + privkey
 // }
 
-export const deriveWallet = (chainId: string, nextDerivationIdx: number) => {
+export const deriveWallet = async (chainId: string, nextDerivationIdx: number) => {
     const seed = getSeed()
     if (!seed) throw new Error("Vault is locked");
 
     switch (chainId) {
-        case "501": return deriveSolanaWallet(seed, nextDerivationIdx);
+        case "501": return await deriveSolanaWallet(seed, nextDerivationIdx);
         default: throw new Error("unsupported chain");
     }
 }

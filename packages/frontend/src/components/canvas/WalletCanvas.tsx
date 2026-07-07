@@ -64,6 +64,7 @@ const WalletCanvasInner = () => {
         // move to hooks
         try {
             const newWallet = await createWallet("501", null, mousePosition);
+            console.log("new wallet", newWallet);
             addNode({
                 id: newWallet.id,
                 type: "wallet",

@@ -103,19 +103,19 @@ export const createWallet = async (chainCode: string, alias: string | null, posi
 
             }).then(resp => resp.json());
 
-            const walletAddress = await deriveWallet(chainCode, nextIndex);
+            const derivedWallet = await deriveWallet(chainCode, nextIndex);
 
             const resp = await apiFetch("/wallets", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    address: walletAddress,
+                    address: derivedWallet,
                     derivationIndex: nextIndex,
                     alias,
-                    chainId: chainCode,
+                    chainId: chainCode, // chain instead of chain_id
                     posX: position.x,
                     posY: position.y,
-                })
+                }),
             });
             if (resp.status === 409) continue;
 

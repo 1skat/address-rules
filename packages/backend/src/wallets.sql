@@ -35,5 +35,5 @@ INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)
 VALUES ('501', '11111111111111111111111111111111', 'SOL', 'Solana', 9, to_timestamp(1584658800));
  
 INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)  
-VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641)); -- devnet address
+VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641)); -- devnet address, 
 

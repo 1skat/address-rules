@@ -1,6 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
 import { memo } from "react";
-import { useCanvasStore } from "../store/useCanvasStore";
+import { useCanvasStore, type EdgeTransactionData } from "../store/useCanvasStore";
 
 type GetSpecialPathParams = {
     sourceX: number;
@@ -24,8 +24,11 @@ const getSpecialPath = (
     ];
 };
 
-export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target }: EdgeProps) => {
+export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, data }: EdgeProps) => {
     const edges = useCanvasStore((s) => s.edges);
+
+    if (!data) return;
+
     const isBidirectionalEdge = edges.some(e => (e.source === target && e.target === source) || (e.target === source && e.source === target));
     const [edgePath, labelX, labelY] = isBidirectionalEdge
         ? getSpecialPath({ sourceX, sourceY, targetX, targetY }, sourceX < targetX ? 35 : -35)
@@ -50,7 +53,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    <span>0 SOL</span>
+                    <span>{(data as EdgeTransactionData).amountInfo.uiAmount} {(data as EdgeTransactionData).tokenMeta.symbol}</span>
                 </div>
             </EdgeLabelRenderer>
         </>
