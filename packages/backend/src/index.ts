@@ -145,7 +145,7 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
         INSERT INTO accounts (provider, identifier, salt)
         VALUES (${walletType}, ${address}, ${randomBytes(32).toString("hex")})
         ON CONFLICT (provider, identifier) DO NOTHING
-        RETURNING id
+        RETURNING id 
         )
         SELECT * FROM inserted
         UNION ALL

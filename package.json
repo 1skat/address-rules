@@ -10,6 +10,7 @@
     "dev:fe": "npm -w packages/frontend run dev"
   },
   "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata-kit": "^0.0.3",
     "@scure/bip32": "^2.2.0",
     "@tailwindcss/vite": "^4.3.0",
     "cookie-parser": "^1.4.7",

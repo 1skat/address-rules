@@ -59,8 +59,8 @@ export const buildSolanaTransaction = async (fromAddress: KeyPairSigner, ixs: In
         // blockhash: signedTx.lifetimeConstraint.blockhash,
         // lastValidBlockHeight: signedTx.lifetimeConstraint.lastValidBlockHeight.toString(),
         wireTx: getBase64EncodedWireTransaction(signedTx),
-        blockhash: signedTx.lifetimeConstraint,
-        lastValidBlockHeight: signedTx.lifetimeConstraint.toString(),
+        blockhash: signedTx.lifetimeConstraint.blockhash,
+        lastValidBlockHeight: signedTx.lifetimeConstraint.lastValidBlockHeight.toString(),
     }
 }
 

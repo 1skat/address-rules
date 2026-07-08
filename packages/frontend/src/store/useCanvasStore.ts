@@ -65,7 +65,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     decimals: 9,
                 },
                 amountInfo: {
-                    amount: stringifiedBigInt(BigInt(0).toString()),
+                    amount: stringifiedBigInt("0"),
                     uiAmount: "0",
                 },
             }/*default*/) => { // remove default

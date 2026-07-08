@@ -19,7 +19,7 @@ const exampleUserPortfolioStore: EdgeTransactionData[] = [ // remove later
             decimals: 6,
         },
         amountInfo: {
-            amount: stringifiedBigInt(BigInt(0).toString()),
+            amount: stringifiedBigInt("0"),
             uiAmount: "0",
         }
     },
@@ -32,7 +32,7 @@ const exampleUserPortfolioStore: EdgeTransactionData[] = [ // remove later
             decimals: 9,
         },
         amountInfo: {
-            amount: stringifiedBigInt(BigInt(0).toString()),
+            amount: stringifiedBigInt("0"),
             uiAmount: "0",
         }
     }
