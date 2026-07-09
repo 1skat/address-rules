@@ -53,7 +53,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    <span>{(data as EdgeTransactionData).amountInfo.uiAmount} {(data as EdgeTransactionData).tokenMeta.symbol}</span>
+                    <span>{(data as EdgeTransactionData).totals["11111111111111111111111111111111"].uiAmount} {(data as EdgeTransactionData).totals["11111111111111111111111111111111"].tokenMeta.symbol}</span>
                 </div>
             </EdgeLabelRenderer>
         </>

@@ -9,7 +9,7 @@ import { address, stringifiedBigInt } from "@solana/kit";
 import { AddressLabel } from "../AddressLabel";
 import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 
-const exampleUserPortfolioStore: EdgeTransactionData[] = [ // remove later
+const exampleUserPortfolioStore = [ // fetch from the snapshot, snapshot updated on new changes?
     {
         chainId: "501",
         tokenMeta: {
@@ -89,12 +89,13 @@ export const SendSolanaTxCard = () => {
                 <label className="flex gap-1">
                     <span>Total</span>
                     <input type="number" className="border" placeholder="0" onChange={(e) => {
-                        const decimals = selectedEdge.data?.tokenMeta.decimals;
+                        const totals = selectedEdge.data?.totals[selectedEdge.data.selectedMint];
+                        const decimals = totals?.tokenMeta.decimals;
                         if (!decimals) return;
                         const val = toSmallestUnit(e.target.value, decimals);
                         if (val) setAmount(val);
                     }} />
-                    <select value={selectedEdge.data?.tokenMeta.mint} onChange={(e) => handlerCurrencyChange(e.target.value)}>
+                    <select value={selectedEdge.data?.selectedMint} onChange={(e) => handlerCurrencyChange(e.target.value)}>
                         {exampleUserPortfolioStore.map(t => (
                             <option key={t.tokenMeta.mint} value={t.tokenMeta.mint}>{t.tokenMeta.symbol}</option>)
                         )}

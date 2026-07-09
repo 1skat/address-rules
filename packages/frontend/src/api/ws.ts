@@ -221,21 +221,12 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
     const subId = crypto.randomUUID();
     const route = "/wallets/subscribe-updates";
 
-    // const unsubscribe = () => {
-    //     activeSubscriptions.delete(subId);
-    //     wsClient.send({
-    //         op: 6,
-    //         id: subId,
-    //         route,
-    //     });
-    // }
-
     const handler = (msg: any) => {
         switch (msg.type) {
             case "init":
                 console.log("INIT:", msg);
                 break;
-            case "update":
+            case "wallet-update":
                 console.log("UPDATE:", msg);
                 break;
         }

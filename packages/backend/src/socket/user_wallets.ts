@@ -5,10 +5,6 @@ import type { Context } from "@/stream.js";
 import { subsClient } from "@/ws_client.js";
 import { address, stringifiedBigInt, type Address, type Lamports, type Signature, type StringifiedBigInt, type StringifiedNumber } from "@solana/kit";
 import util from "util";
-import {
-    fetchMetadataFromSeeds,
-} from "@metaplex-foundation/mpl-token-metadata-kit";
-
 
 // get the wallets
 // trigget update ack per wallet
@@ -20,27 +16,15 @@ type UserWalletInit = {
     type: "init",
     snapshot: Map<string, WalletData>
 }
-type TokenUpdate = {
-    chain: "SOLANA" | "ETHEREUM";
-    symbol: string;
-    name: string;
-    tokenAddress: string,
-    balance: string,
-    decimals: number,
-}
 type UserWalletUpdate = {
-    type: "wallet-update"
-    walletAddress: string;
-    tokenUpdates: TokenUpdate[];
+    type: "wallet-update";
+    chain: "SOLANA" | "ETHEREUM";
+    tokenUpdates: { walletAddress: Address, updates: TokenUpdate[] }[]
 }
 
 const _rpcResultHint = solanaRpc.getTransaction('' as Signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, });
 type GetTranscationResult = NonNullable<Awaited<ReturnType<typeof _rpcResultHint['send']>>>;
 
-type AccountBalancenInfo = {
-    accountAddress: Address,
-    balance: string,
-}
 // type TokenBalanceInfo = {
 //     walletAddress: Address;
 //     mint: Address;
@@ -56,13 +40,23 @@ type AccountBalancenInfo = {
 //     walletTokenBalanceUpdates?: TokenBalanceInfo[];
 // }
 
+type TokenUpdate = {
+    mint: string;
+    symbol: string,
+    name: string,
+    balance: {
+        amount: StringifiedBigInt;
+        decimals: number;
+        uiAmount: string;
+    }
+}
 type WalletTokenBalanceChange = {
     walletAddress: Address,
     mint: Address,
     amountInfo: {
         amount: StringifiedBigInt;
         decimals: number;
-        uiAmount: StringifiedNumber;
+        uiAmount: string;
     }
 
 }
@@ -70,46 +64,81 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
     const { meta, transaction } = data;
     if (!meta || !transaction) throw new Error("no meta/transaction found, handle the err over ws");
 
-    // const balanceChanges: WalletTokenBalanceChange = [];
+    const balanceChanges: WalletTokenBalanceChange[] = [];
 
-    const nativUpdates: WalletTokenBalanceChange[] = transaction.message.accountKeys
-        .map((ak, idx) => ({ ak, idx }))
-        .filter(({ ak, idx }) => walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx])
-        .map(({ ak, idx }) => (
-            {
-                walletAddress: ak.pubkey, mint: address("11111111111111111111111111111111"), amountInfo: {
+    for (const [idx, ak] of transaction.message.accountKeys.entries()) {
+        if (walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx]) {
+            balanceChanges.push({
+                walletAddress: ak.pubkey, mint: address("11111111111111111111111111111111"),
+                amountInfo: {
                     amount: stringifiedBigInt(meta.postBalances[idx]!.toString()),
                     decimals: 9,
                     uiAmount: meta.postBalances[idx]!.toString(),
                 }
+            })
+        }
+    }
+
+    if (meta.postTokenBalances) {
+        const preTokenBalancesMap = new Map(meta.preTokenBalances?.map(b => [b.accountIndex, b]) ?? []);
+
+        for (const postB of meta.postTokenBalances) {
+            if (!postB.owner || !walletStore.has(postB.owner)) continue;
+
+            const preB = preTokenBalancesMap.get(postB.accountIndex);
+            if (!preB /* new post balance, new token */ || preB.uiTokenAmount.amount !== postB.uiTokenAmount.amount) {
+                balanceChanges.push({
+                    walletAddress: postB.owner,
+                    mint: postB.mint,
+                    amountInfo: {
+                        amount: postB.uiTokenAmount.amount,
+                        decimals: postB.uiTokenAmount.decimals,
+                        uiAmount: postB.uiTokenAmount.uiAmountString,
+                    }
+                });
             }
-        ))
+        }
+    }
 
-    // const walletNativeBalanceUpdates = transaction.message.accountKeys
-    //     .map((ak, idx) => ({ ak, idx }))
-    //     .filter(({ ak, idx }) => walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx])
-    //     .map(({ ak, idx }) => ({ accountAddress: ak.pubkey, balance: meta.postBalances[idx]!.toString() }));
-
-    // if (!meta.postTokenBalances) return { walletNativeBalanceUpdates }; // no changes for tokens
-
-    // const preBalancesMap = new Map(
-    //     meta.preTokenBalances?.map(b => [b.accountIndex, b]) ?? [],
-    // );
-    // const walletTokenBalanceUpdates = meta.postTokenBalances
-    //     .filter(postB => postB.owner && walletStore.has(postB.owner))
-    //     .flatMap(postB => {
-    //         if (!postB.owner || !walletStore.has(postB.owner)) return; // its not associated with ant of the users walles
-
-    //         const preB = preBalancesMap.get(postB.accountIndex);
-    //         if (!preB || preB.uiTokenAmount.amount !== postB.uiTokenAmount.amount) {
-    //             return [{ walletAddress: postB.owner, mint: postB.mint, amountInfo: postB.uiTokenAmount }];
-    //         }
-
-    //         return [];
-    //     });
-
-    return { walletNativeBalanceUpdates, walletTokenBalanceUpdates };
+    return balanceChanges;
 }
+// const nativeUpdates = transaction.message.accountKeys
+//     .map((ak, idx) => ({ ak, idx }))
+//     .filter(({ ak, idx }) => walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx])
+//     .map(({ ak, idx }) => (
+//         {
+//             walletAddress: ak.pubkey, mint: address("11111111111111111111111111111111"), amountInfo: {
+//                 amount: stringifiedBigInt(meta.postBalances[idx]!.toString()),
+//                 decimals: 9,
+//                 uiAmount: meta.postBalances[idx]!.toString(),
+//             }
+//         }
+//     ))
+
+// const walletNativeBalanceUpdates = transaction.message.accountKeys
+//     .map((ak, idx) => ({ ak, idx }))
+//     .filter(({ ak, idx }) => walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx])
+//     .map(({ ak, idx }) => ({ accountAddress: ak.pubkey, balance: meta.postBalances[idx]!.toString() }));
+
+// if (!meta.postTokenBalances) return { walletNativeBalanceUpdates }; // no changes for tokens
+
+// const preBalancesMap = new Map(
+//     meta.preTokenBalances?.map(b => [b.accountIndex, b]) ?? [],
+// );
+// const walletTokenBalanceUpdates = meta.postTokenBalances
+//     .filter(postB => postB.owner && walletStore.has(postB.owner))
+//     .flatMap(postB => {
+//         if (!postB.owner || !walletStore.has(postB.owner)) return; // its not associated with ant of the users walles
+
+//         const preB = preBalancesMap.get(postB.accountIndex);
+//         if (!preB || preB.uiTokenAmount.amount !== postB.uiTokenAmount.amount) {
+//             return [{ walletAddress: postB.owner, mint: postB.mint, amountInfo: postB.uiTokenAmount }];
+//         }
+
+//         return [];
+//     });
+
+// return { walletNativeBalanceUpdates, walletTokenBalanceUpdates };
 
 const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Address, tokenMint: Address) => {
     // hot tokens metadata from redis
@@ -149,66 +178,102 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
 }
 
 const getUpdatedTokenBalances = async (
-    changes: BalanceChanges,
-    userWalletTokens: Map<string, {
+    changes: WalletTokenBalanceChange[],
+    userWalletTokensMeta: Map<string, {
         token_address: string,
         symbol: string,
         name: string,
     }>,
     handleNewWallet: (newAccData: any) => Promise<void>,
-) => {
+): Promise<UserWalletUpdate> => {
     if (!changes) throw new Error("NO_CHANGES");
 
-    const updates = new Map<Address, {
-        mint: string;
-        symbol: string,
-        name: string,
-        balance: {
-            amount: StringifiedBigInt;
-            decimals: number;
-            uiAmount: string;
+    const tokenUpdates = new Map<Address, TokenUpdate[]>();
+
+    for (const change of changes) {
+        console.log("change for wa", change);
+        if (!tokenUpdates.has(change.walletAddress)) {
+            tokenUpdates.set(change.walletAddress, []);
         }
-    }[]>();
 
-    changes.walletNativeBalanceUpdates.forEach(change => {
-        updates.set(change.accountAddress, [{
-            mint: "11111111111111111111111111111111",
-            symbol: "SOL",
-            name: "Solana",
-            balance: {
-                amount: stringifiedBigInt(change.balance),
-                decimals: 9,
-                uiAmount: change.balance, // create a function
-
+        const userTokenUpdates = tokenUpdates.get(change.walletAddress)!;
+        if (change.mint === "11111111111111111111111111111111") {
+            userTokenUpdates.push({
+                mint: "11111111111111111111111111111111",
+                symbol: "SOL",
+                name: "Solana",
+                balance: {
+                    amount: stringifiedBigInt(change.amountInfo.amount),
+                    decimals: 9,
+                    uiAmount: change.amountInfo.uiAmount, // create a function
+                }
+            });
+        } else {
+            const tokenMeta = userWalletTokensMeta.get(change.mint) ?? await handleNewWallet(change.mint)
+            console.log(tokenMeta)
+            if (!tokenMeta) {
+                console.error("token meta missing")
+                continue;
             }
-        }]);
-    });
 
-    if (changes.walletTokenBalanceUpdates) {
-        console.log("wallet token balances exists");
-        console.log("user wallet tokens", userWalletTokens);
-        for (const change of changes.walletTokenBalanceUpdates) {
-            console.log("change mint", change.mint);
-            const tokenMeta = userWalletTokens.get(change.mint) ?? await handleNewWallet(change.mint);
-            if (!tokenMeta) continue;
-            console.log("TOKEN META", tokenMeta);
-
-            console.log("change", change);
-            const userUpdates = updates.get()
-            updates.get(change.walletAddress)?.push({
+            userTokenUpdates.push({
                 mint: tokenMeta.token_address,
                 symbol: tokenMeta.symbol,
                 name: tokenMeta.name,
                 balance: {
                     amount: change.amountInfo.amount,
                     decimals: change.amountInfo.decimals,
-                    uiAmount: change.amountInfo.uiAmountString,
+                    uiAmount: change.amountInfo.uiAmount,
                 }
             });
         }
     }
 
-    return updates;
+    return {
+        type: "wallet-update",
+        chain: "SOLANA",
+        tokenUpdates: [...tokenUpdates].map(([walletAddress, updates]) => ({ walletAddress, updates })),
+    }
+    // [...tokenUpdates].map(([walletAddress, tokenUpdates]) => ({ walletAddress, tokenUpdates }));
+
+    // changes.walletNativeBalanceUpdates.forEach(change => {
+    //     updates.set(change.accountAddress, [{
+    //         mint: "11111111111111111111111111111111",
+    //         symbol: "SOL",
+    //         name: "Solana",
+    //         balance: {
+    //             amount: stringifiedBigInt(change.balance),
+    //             decimals: 9,
+    //             uiAmount: change.balance, // create a function
+
+    //         }
+    //     }]);
+    // });
+
+    // if (changes.walletTokenBalanceUpdates) {
+    //     console.log("wallet token balances exists");
+    //     console.log("user wallet tokens", userWalletTokens);
+    //     for (const change of changes.walletTokenBalanceUpdates) {
+    //         console.log("change mint", change.mint);
+    //         const tokenMeta = userWalletTokens.get(change.mint) ?? await handleNewWallet(change.mint);
+    //         if (!tokenMeta) continue;
+    //         console.log("TOKEN META", tokenMeta);
+
+    //         console.log("change", change);
+    //         const userUpdates = updates.get()
+    //         updates.get(change.walletAddress)?.push({
+    //             mint: tokenMeta.token_address,
+    //             symbol: tokenMeta.symbol,
+    //             name: tokenMeta.name,
+    //             balance: {
+    //                 amount: change.amountInfo.amount,
+    //                 decimals: change.amountInfo.decimals,
+    //                 uiAmount: change.amountInfo.uiAmountString,
+    //             }
+    //         });
+    //     }
+    // }
+
 }
 
 export const ackSubscribedUserWallets = async (userId: string, topic: string): Promise<void> => {
@@ -269,22 +334,11 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
         // updates are for the UI only, dont store ata accounts or balances
         const changes = parseTxBalancesChanges(txData); // can have multple updates from different wallets
         console.log("balance changes:", changes)
-        const tokenUpdates = await getUpdatedTokenBalances(changes, allUserTokens, (newTokenData: any) => addNewTokenToUserWallet(userId, wt.wallet_address, newTokenData)); // updates is a list of userTokens with updates balances
-        console.log("token updates:", util.inspect(tokenUpdates, { depth: null }));
-        // console.log("token updates:", tokenUpdates)
+        const walletUpdateMsg = await getUpdatedTokenBalances(changes, allUserTokens, (newTokenData: any) => addNewTokenToUserWallet(userId, wt.wallet_address, newTokenData)); // updates is a list of userTokens with updates balances
+        console.log("token updates:", util.inspect(walletUpdateMsg, { depth: null }));
 
-        // const msg: UserWalletUpdate = { 
-        //     type: "update",
-        //     walletAddress: wt.wallet_address,
-        //     tokenUpdates,
-        // }
-
-        // return subsClient.push(userId, topic, msg);
+        return subsClient.push(userId, topic, walletUpdateMsg);
     }));
 }
-
-// export const updateUserWalletState = async (userId: string, subId: string, data: any) => {
-
-// }
 
 

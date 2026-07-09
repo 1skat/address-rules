@@ -13,13 +13,21 @@ export type TokenMeta = {
 
 export type EdgeTransactionData = {
     chainId: "501" | "60";
-    tokenMeta: TokenMeta;
-    amountInfo: {
-        amount: StringifiedBigInt,
-        uiAmount: string,
-    };
+    selectedMint: string;
+    totals: Record<string, {
+        tokenMeta: TokenMeta;
+        amount: StringifiedBigInt;
+        uiAmount: string;
+    }>
 }
 export type TransactionEdge = Edge<EdgeTransactionData>;
+
+export type CurrencyUpdateData = {
+    mint: string;
+    tokenMeta: TokenMeta;
+    amount: StringifiedBigInt;
+    uiAmount: string;
+}
 
 type CanvasStore = {
     nodes: Node[];
@@ -33,7 +41,7 @@ type CanvasStore = {
     setEdges: (change: any) => void;
     addConnection: (connection: Connection) => void;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
-    setEdgeCurrency: (edgeId: string, data: EdgeTransactionData) => void;
+    setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -56,20 +64,22 @@ export const useCanvasStore = create<CanvasStore>()(
                 console.log("removing edge:", id)
                 set((s) => ({ edges: s.edges.filter(e => e.id !== id) }))
             },
-            addConnection: (connection, data: EdgeTransactionData = {
+            addConnection: (connection, data: EdgeTransactionData = { // take the current chain from the store or pass the prop of the curr selected chain
                 chainId: "501",
-                tokenMeta: {
-                    mint: "11111111111111111111111111111111",
-                    symbol: "SOL",
-                    name: "Solana",
-                    decimals: 9,
-                },
-                amountInfo: {
-                    amount: stringifiedBigInt("0"),
-                    uiAmount: "0",
-                },
+                selectedMint: "11111111111111111111111111111111",
+                totals: {
+                    "11111111111111111111111111111111": {
+                        tokenMeta: {
+                            mint: "11111111111111111111111111111111",
+                            symbol: "SOL",
+                            name: "Solana",
+                            decimals: 9,
+                        },
+                        amount: stringifiedBigInt("0"),
+                        uiAmount: "0",
+                    }
+                }
             }/*default*/) => { // remove default
-                console.log("adding connection:", connection);
                 set((s) => {
                     return {
                         edges: addEdge<TransactionEdge>({
@@ -91,11 +101,10 @@ export const useCanvasStore = create<CanvasStore>()(
             reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => set((s) => ({
                 edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
             })),
-            setEdgeCurrency: (edgeId: string, data: EdgeTransactionData) => {
+            setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => {
                 set((s) => ({
-                    // update edge inside edges and selectedEdge
-                    edges: s.edges.map((e) => e.id === edgeId ? { ...e, data } : e),
-                    selectedEdge: s.selectedEdge?.id === edgeId ? { ...s.selectedEdge, data } : s.selectedEdge,
+                    edges: s.edges.map((e) => e.id === edgeId ? accumulateTotals(e, data) : e),
+                    selectedEdge: s.selectedEdge?.id === edgeId ? accumulateTotals(s.selectedEdge, data) : s.selectedEdge,
                 }));
             },
         }),
@@ -105,3 +114,24 @@ export const useCanvasStore = create<CanvasStore>()(
         }
     ),
 );
+
+
+const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): TransactionEdge => {
+    const { mint, tokenMeta, amount, uiAmount } = data;
+    const prev = e.data?.totals[mint]!
+    const newAmount = (prev ? BigInt(prev.amount) : BigInt(0)) + BigInt(amount);
+    const newUi = (prev ? parseFloat(prev.uiAmount) : 0) + parseFloat(uiAmount);
+
+    return {
+        ...e,
+        data: {
+            ...e.data,
+            totals: {
+                ...e.data?.totals,
+                [mint]: {
+                    tokenMeta, amount: stringifiedBigInt(newAmount.toString()), uiAmount: newUi.toString(),
+                }
+            }
+        }
+    }
+};
