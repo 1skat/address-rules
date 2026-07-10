@@ -6,7 +6,8 @@ import type { Connection } from "@xyflow/react";
 export const useEdgeInteraction = () => {
     const removeEdge = useCanvasStore(s => s.removeEdge);
     const reconnectEdge = useCanvasStore(s => s.reconnectEdge);
-    const setSelectedEdge = useCanvasStore(s => s.setSelectedEdge);
+    // const setSelectedEdge = useCanvasStore(s => s.setSelectedEdge);
+    const setSelectedEdgeId = useCanvasStore(s => s.setSelectedEdgeId);
     const edgeReconnectSuccessful = useRef(false);
 
     const onEdgeMouseEnter = useCallback(async (ev: React.MouseEvent, edge: TransactionEdge) => {
@@ -19,8 +20,10 @@ export const useEdgeInteraction = () => {
     const onEdgeClick = useCallback((_: React.MouseEvent, edge: TransactionEdge) => {
         if (useToolStore.getState().activeTool !== "cursor") return;
 
-        setSelectedEdge(edge)
-    }, [setSelectedEdge])
+        setSelectedEdgeId(edge.id);
+        console.log(edge.id);
+        // setSelectedEdge(edge)
+    }, [setSelectedEdgeId]);
 
     const onReconnectStart = useCallback(() => {
         edgeReconnectSuccessful.current = false;
@@ -34,13 +37,13 @@ export const useEdgeInteraction = () => {
     const onReconnectEnd = useCallback((_, edge: TransactionEdge) => {
         if (!edgeReconnectSuccessful.current) {
             removeEdge(edge.id)
-            setSelectedEdge(null)
+            setSelectedEdgeId(null)
             return;
         }
 
-        setSelectedEdge(edge)
+        setSelectedEdgeId(edge.id)
         edgeReconnectSuccessful.current = true;
-    }, [removeEdge, setSelectedEdge])
+    }, [removeEdge, setSelectedEdgeId])
 
     return { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick }
 }

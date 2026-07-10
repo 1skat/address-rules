@@ -1,7 +1,7 @@
 import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
-import { useState } from "react";
-import { useCanvasStore, type EdgeTransactionData } from "../../store/useCanvasStore";
+import React, { useState } from "react";
+import { useCanvasStore, type CurrencyUpdateData, type EdgeTransactionData } from "../../store/useCanvasStore";
 import { toSmallestUnit } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
@@ -38,9 +38,9 @@ const exampleUserPortfolioStore = [ // fetch from the snapshot, snapshot updated
     }
 ];
 
-export const SendSolanaTxCard = () => {
+export const SendSolanaTxCard = React.memo(() => {
     const activeTool = useToolStore(s => s.activeTool);
-    const selectedEdge = useCanvasStore(s => s.selectedEdge);
+    const selectedEdge = useCanvasStore(s => s.edges.find(e => e.id === s.selectedEdgeId));
     const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
     const nodes = useCanvasStore(s => s.nodes);
     const [amount, setAmount] = useState<bigint>(0n);
@@ -55,7 +55,11 @@ export const SendSolanaTxCard = () => {
     const handlerCurrencyChange = (tokenMint: string) => {
         const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
         if (!token) return;
-        setEdgeCurrency(selectedEdge.id, token);
+        setEdgeCurrency(selectedEdge.id, {
+            mint: token.tokenMeta.mint,
+            tokenMeta: token.tokenMeta,
+            amountInfo: token.amountInfo,
+        });
     }
 
     const onClickHandler = async () => {
@@ -117,4 +121,4 @@ export const SendSolanaTxCard = () => {
             </div>
         </Panel >
     )
-}
+});

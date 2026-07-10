@@ -25,8 +25,10 @@ export type TransactionEdge = Edge<EdgeTransactionData>;
 export type CurrencyUpdateData = {
     mint: string;
     tokenMeta: TokenMeta;
-    amount: StringifiedBigInt;
-    uiAmount: string;
+    amountInfo: {
+        amount: StringifiedBigInt;
+        uiAmount: string;
+    }
 }
 
 type CanvasStore = {
@@ -36,8 +38,11 @@ type CanvasStore = {
     removeNode: (id: string) => void;
     removeEdge: (id: string) => void;
     edges: TransactionEdge[];
-    selectedEdge: TransactionEdge | null;
-    setSelectedEdge: (edge: TransactionEdge | null) => void;
+    // selectedEdge: TransactionEdge | null;
+    // setSelectedEdge: (edge: TransactionEdge | null) => void;
+    selectedEdgeId: string | null;
+    setSelectedEdgeId: (edgeId: string | null) => void;
+    // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
     addConnection: (connection: Connection) => void;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
@@ -46,10 +51,15 @@ type CanvasStore = {
 
 export const useCanvasStore = create<CanvasStore>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             nodes: [],
             edges: [],
-            selectedEdge: null,
+            // selectedEdge: null,
+            selectedEdgeId: null,
+            setSelectedEdgeId: (edgeId: string | null) => {
+                return set({ selectedEdgeId: edgeId });
+            },
+            // getSelectedEdge: () => get().edges.find(e => e.id === get().selectedEdgeId) ?? null,
             setNodes: (change) => set((s) => ({ nodes: applyNodeChanges(change, s.nodes) })), // update the eniter array
             // addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
             addNode: (node) => {
@@ -79,7 +89,7 @@ export const useCanvasStore = create<CanvasStore>()(
                         uiAmount: "0",
                     }
                 }
-            }/*default*/) => { // remove default
+            }/*default*/) => {
                 set((s) => {
                     return {
                         edges: addEdge<TransactionEdge>({
@@ -94,17 +104,16 @@ export const useCanvasStore = create<CanvasStore>()(
                 console.log("set edge change:", change)
                 return { edges: applyEdgeChanges(change, s.edges) }
             }),
-            setSelectedEdge: (edge: TransactionEdge | null) => {
-                console.log("selected edge:", edge)
-                return set({ selectedEdge: edge })
-            },
+            // setSelectedEdge: (edge: TransactionEdge | null) => {
+            //     console.log("selected edge:", edge)
+            //     return set({ selectedEdge: edge })
+            // },
             reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => set((s) => ({
                 edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
             })),
             setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => {
                 set((s) => ({
                     edges: s.edges.map((e) => e.id === edgeId ? accumulateTotals(e, data) : e),
-                    selectedEdge: s.selectedEdge?.id === edgeId ? accumulateTotals(s.selectedEdge, data) : s.selectedEdge,
                 }));
             },
         }),
@@ -117,15 +126,16 @@ export const useCanvasStore = create<CanvasStore>()(
 
 
 const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): TransactionEdge => {
-    const { mint, tokenMeta, amount, uiAmount } = data;
-    const prev = e.data?.totals[mint]!
-    const newAmount = (prev ? BigInt(prev.amount) : BigInt(0)) + BigInt(amount);
-    const newUi = (prev ? parseFloat(prev.uiAmount) : 0) + parseFloat(uiAmount);
+    const { mint, tokenMeta, amountInfo } = data;
+    const prev = e.data?.totals[mint]
+    const newAmount = (prev ? BigInt(prev.amount) : BigInt(0)) + BigInt(amountInfo.amount);
+    const newUi = (prev ? parseFloat(prev.uiAmount) : 0) + parseFloat(amountInfo.uiAmount);
 
     return {
         ...e,
         data: {
             ...e.data,
+            selectedMint: mint,
             totals: {
                 ...e.data?.totals,
                 [mint]: {

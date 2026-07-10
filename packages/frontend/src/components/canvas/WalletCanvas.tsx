@@ -48,39 +48,46 @@ const WalletCanvasInner = () => {
     // Edges
     const edges = useCanvasStore(s => s.edges);
     const addConnection = useCanvasStore(s => s.addConnection);
-    const setEdges = useCanvasStore(s => s.setEdges);
+    // const setEdges = useCanvasStore(s => s.setEdges);
     const { onNodeMouseEnter } = useNodeInteraction();
     const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick } = useEdgeInteraction();
+    const setSelectedEdgeId = useCanvasStore(s => s.setSelectedEdgeId);
 
-    // todo move to node hooks
+
+    // todo move to node hooks make a genetic handler
     const onPaneClick = useCallback(async (e: React.MouseEvent) => {
-        if (activeTool !== "add") return;
-
-        const mousePosition = screenToFlowPosition({
-            x: e.clientX,
-            y: e.clientY,
-        });
-
-        // move to hooks
-        try {
-            const newWallet = await createWallet("501", null, mousePosition);
-            console.log("new wallet", newWallet);
-            addNode({
-                id: newWallet.id,
-                type: "wallet",
-                position: mousePosition,
-                data: {
-                    address: newWallet.address,
-                    alias: newWallet.alias,
-                    derivationIndex: newWallet.derivation_index,
-                    chainId: newWallet.chain_id,
-                },
+        if (activeTool === "cursor") {
+            setSelectedEdgeId(null)
+        }
+        if (activeTool === "add") {
+            const mousePosition = screenToFlowPosition({
+                x: e.clientX,
+                y: e.clientY,
             });
-        } catch (err) {
-            console.error(`ERROR adding wallet: ${err}`);
+
+            // move to hooks
+            try {
+                const newWallet = await createWallet("501", null, mousePosition);
+                console.log("new wallet", newWallet);
+                addNode({
+                    id: newWallet.id,
+                    type: "wallet",
+                    position: mousePosition,
+                    data: {
+                        address: newWallet.address,
+                        alias: newWallet.alias,
+                        derivationIndex: newWallet.derivation_index,
+                        chainId: newWallet.chain_id,
+                    },
+                });
+            } catch (err) {
+                console.error(`ERROR adding wallet: ${err}`);
+            }
+
         }
 
-    }, [activeTool, addNode, screenToFlowPosition]);
+
+    }, [activeTool, addNode, screenToFlowPosition, setSelectedEdgeId]);
 
     return (
         <div className="relative w-screen h-screen" data-tool={activeTool}>

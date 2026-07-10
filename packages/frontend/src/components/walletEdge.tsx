@@ -25,9 +25,10 @@ const getSpecialPath = (
 };
 
 export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, data }: EdgeProps) => {
-    const edges = useCanvasStore((s) => s.edges);
-
+    const edges = useCanvasStore((s) => s.edges); // can i optimize it?
     if (!data) return;
+    const { selectedMint, totals } = data as EdgeTransactionData;
+
 
     const isBidirectionalEdge = edges.some(e => (e.source === target && e.target === source) || (e.target === source && e.source === target));
     const [edgePath, labelX, labelY] = isBidirectionalEdge
@@ -53,7 +54,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    <span>{(data as EdgeTransactionData).totals["11111111111111111111111111111111"].uiAmount} {(data as EdgeTransactionData).totals["11111111111111111111111111111111"].tokenMeta.symbol}</span>
+                    <span>{totals[selectedMint].uiAmount} {totals[selectedMint].tokenMeta.symbol}</span>
                 </div>
             </EdgeLabelRenderer>
         </>
