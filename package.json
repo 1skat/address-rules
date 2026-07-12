@@ -12,6 +12,8 @@
   "dependencies": {
     "@metaplex-foundation/mpl-token-metadata-kit": "^0.0.3",
     "@scure/bip32": "^2.2.0",
+    "@solana-program/system": "^0.12.2",
+    "@solana-program/token": "^0.14.0",
     "@tailwindcss/vite": "^4.3.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",

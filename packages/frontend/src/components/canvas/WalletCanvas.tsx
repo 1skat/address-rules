@@ -68,7 +68,6 @@ const WalletCanvasInner = () => {
             // move to hooks
             try {
                 const newWallet = await createWallet("501", null, mousePosition);
-                console.log("new wallet", newWallet);
                 addNode({
                     id: newWallet.id,
                     type: "wallet",
@@ -107,6 +106,7 @@ const WalletCanvasInner = () => {
                 onNodesChange={setNodes}
                 // onEdgesChange={setEdges} // todo: do i need it since i have addConnection
                 onConnect={addConnection}
+                onEdgesChange={ }
                 onReconnectStart={onReconnectStart}
                 onReconnect={onReconnect}
                 onReconnectEnd={onReconnectEnd}

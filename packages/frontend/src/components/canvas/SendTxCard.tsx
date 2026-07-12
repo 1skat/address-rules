@@ -53,6 +53,7 @@ export const SendSolanaTxCard = React.memo(() => {
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
     const handlerCurrencyChange = (tokenMint: string) => {
+        console.log("token:", tokenMint);
         const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
         if (!token) return;
         setEdgeCurrency(selectedEdge.id, {
@@ -74,9 +75,14 @@ export const SendSolanaTxCard = React.memo(() => {
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address);
 
-            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, selectedEdge.data.tokenMeta)
-            const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs) // get a signature here locally
-            console.log("signedTX", tx);
+            const { totals, selectedMint } = selectedEdge.data;
+            if (!totals[selectedMint]) {
+                console.error("mint does not exist in totals for:", selectedMint)
+                return;
+            }
+
+            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, totals[selectedMint].tokenMeta);
+            const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
             const { orderId } = await sendSolanaTransaction(tx);
             subscribeOrderStatus(orderId); // might hide it in sendSolanatranscation
         } catch (err) {

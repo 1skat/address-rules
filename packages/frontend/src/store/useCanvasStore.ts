@@ -51,7 +51,7 @@ type CanvasStore = {
 
 export const useCanvasStore = create<CanvasStore>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             nodes: [],
             edges: [],
             // selectedEdge: null,
@@ -108,9 +108,12 @@ export const useCanvasStore = create<CanvasStore>()(
             //     console.log("selected edge:", edge)
             //     return set({ selectedEdge: edge })
             // },
-            reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => set((s) => ({
-                edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
-            })),
+            reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => {
+                console.log(oldEdge.id)
+                set((s) => ({
+                    edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
+                }))
+            },
             setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => {
                 set((s) => ({
                     edges: s.edges.map((e) => e.id === edgeId ? accumulateTotals(e, data) : e),

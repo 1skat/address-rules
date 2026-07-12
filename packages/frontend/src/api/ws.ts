@@ -1,5 +1,6 @@
-import type { Base64EncodedWireTransaction } from "@solana/kit";
+import type { Address, Base64EncodedWireTransaction, StringifiedBigInt } from "@solana/kit";
 import { useSocketStore } from "../store/useSocketStore";
+import { useCanvasStore } from "../store/useCanvasStore";
 
 type SocketRequestMsg = {
     op: 1 | 8 | 4 | 6;
@@ -166,7 +167,14 @@ export const sendSolanaTransaction = async (signedTx: {
 }) =>
     sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx });
 
-// subscribeUserWalletUpdates
+
+type ParsedTransaction = {
+    from: Address, to: Address, tokenMint: Address, amountInfo: { amount: StringifiedBigInt, uiAmount: string }
+}
+type OrderStatus =
+    | { ok: true; status: "FILLED", data: ParsedTransaction }
+    | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
+    | { ok: false; err: { code: string; message?: string } };
 
 export const subscribeOrderStatus = async (orderId: string) => {
     const subId = crypto.randomUUID();
@@ -180,14 +188,19 @@ export const subscribeOrderStatus = async (orderId: string) => {
             route,
         });
     }
-    const handleMsg = (msg: any) => {
-        switch (msg) {
+    const handleMsg = (msg: OrderStatus) => {
+        if (!msg.ok) {
+            console.error("order status failed", msg);
+            return
+        }
+        switch (msg.status) {
             case "EXECUTING": {
                 console.log("tx executing")
                 break; // still processing todo: set zustand states here
             }
             case "FILLED": {
-                console.log("tx filled!")
+
+                // useCanvasStore.getState().setEdgeCurrency()
                 unsubscribe();
                 break;
             }

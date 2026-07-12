@@ -1,11 +1,18 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
 import { subsClient, wsClient } from "@/ws_client.js";
-import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage } from "@solana/kit";
+import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address } from "@solana/kit";
 import {
     identifyTokenInstruction,
-    parseTransferInstruction,
+    TOKEN_PROGRAM_ADDRESS,
+    TokenInstruction,
+    parseTransferCheckedInstruction,
+    identifyAssociatedTokenInstruction,
+    AssociatedTokenInstruction,
+    parseCreateAssociatedTokenIdempotentInstruction,
 } from "@solana-program/token";
+import { identifySystemInstruction, SystemInstruction, SYSTEM_PROGRAM_ADDRESS, parseTransferSolInstruction } from "@solana-program/system";
+
 
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
 type SignedTx = {
@@ -14,8 +21,9 @@ type SignedTx = {
     lastValidBlockHeight: string,
 }
 type OrderStatus =
-    | { ok: true; status: "EXECUTING" | "FILLED" | "EXECUTION_FAILED" }
-    | { ok: false; err: { code: string; message?: string } }
+    | { ok: true; status: "FILLED", data: ParsedTransaction }
+    | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
+    | { ok: false; err: { code: string; message?: string } };
 
 const orderStatusStore = {
     store: new Map<string, OrderStatus>(),
@@ -44,10 +52,9 @@ const orderStatusStore = {
 // helpers
 const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderStatus): void => {
     orderStatusStore.set(orderId, status);
-    // if (!status.ok) return subsClient.pushErrAndDrop(userId, orderId, status.err);
-    // return subsClient.push(userId, orderId, status.status);
     if (!status.ok) return subsClient.pushErrAndDrop(userId, "order_status", status.err);
-    return subsClient.push(userId, "order_status", status.status);
+
+    return subsClient.push(userId, "order_status", status); // push the whole status object
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
@@ -99,20 +106,10 @@ export const processTx = async (userId: string, orderId: string, signedTx: Signe
     const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
     const message = decompileTransactionMessage(compiled);
 
-    const transferIx = message.instructions.find(ix => {
-        console.log("ix", ix)
-        const t = identifyTokenInstruction(ix)
-        return t === 3 || t === 12;
-    })
-    if (!transferIx) {
-        console.log("missing", transferIx)
-        return;
-    }
+    const parsedTx = parseTransfer(message.instructions);
+    if (!parsedTx) return null;
 
-    const parsedIx = parseTransferInstruction(transferIx);
-    console.log("parsed tx", parsedIx);
-
-    return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED" });
+    return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED", data: parsedTx });
 }
 
 // export const subscribeOrderStatus = async (userId: string, subId: string, payload: any) => {
@@ -141,12 +138,80 @@ export const ackSubscribedOrderStatus = async (userId: string, topic: string, pa
 
     if (status) {
         if (status.ok) {
-            // return subsClient.push(userId, orderId , status.status);
-            return subsClient.push(userId, topic, status.status);
-        } else {
-            // return subsClient.pushErrAndDrop(userId, orderId, status.err);
-            return subsClient.pushErrAndDrop(userId, topic, status.err);
+            return subsClient.push(userId, orderId, status);
         }
+        return subsClient.push(userId, topic, status);
+    }
+    console.error("ackSubscribedOrderStatus: order status's value empty")
+    return subsClient.pushErrAndDrop(userId, topic, { code: "ORDER_STATUS_NOT_FOUND" });
+}
+
+
+type ParsedTransaction = {
+    from: Address, to: Address, tokenMint: Address, amountInfo: { amount: StringifiedBigInt, uiAmount: string }
+}
+const parseTransfer = (instructions: Instruction[]): ParsedTransaction | null => {
+    for (const ix of instructions) {
+        const key = `${ix.programAddress}:${getDiscriminator(ix.data)}`
+        const handler = parsers[key];
+
+        if (!handler) continue
+
+        const result = handler(instructions);
+        if (!result) return null
+
+        return result;
+    }
+}
+function handleSystemTransfer(ixs: Instruction[]) {
+    const solTransfer = ixs.find(ix => identifySystemInstruction(ix) === SystemInstruction.TransferSol);
+    if (!solTransfer) return null;
+
+    const parsed = parseTransferSolInstruction(solTransfer);
+
+    return {
+        from: parsed.accounts.source.address,
+        to: parsed.accounts.destination.address,
+        tokenMint: address("11111111111111111111111111111111"),
+        amountInfo: {
+            amount: stringifiedBigInt(parsed.data.amount.toString()),
+            uiAmount: (Number(parsed.data.amount) / 10 ** 9).toString(),
+        }
+    }
+}
+function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | null {
+    const checkedTransfer = ixs.find(ix => identifyTokenInstruction(ix) === TokenInstruction.TransferChecked)
+    if (!checkedTransfer) return null;
+
+    const ataIx = ixs.find(ix => identifyAssociatedTokenInstruction(ix) === AssociatedTokenInstruction.CreateAssociatedTokenIdempotent)
+    if (!ataIx) return null;
+
+    const { accounts: transferCheckedAccs, data: amountInfo } = parseTransferCheckedInstruction(checkedTransfer);
+    const { accounts: ataAccs } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
+
+    if (transferCheckedAccs.authority === ataAccs.payer /*from*/ && transferCheckedAccs.destination === ataAccs.ata/*to*/ && transferCheckedAccs.mint === ataAccs.mint) {
+        return {
+            from: transferCheckedAccs.authority.address,
+            to: ataAccs.owner.address,
+            tokenMint: transferCheckedAccs.mint.address,
+            amountInfo: {
+                amount: stringifiedBigInt(amountInfo.amount.toString()),
+                uiAmount: (Number(amountInfo.amount) / 10 ** amountInfo.decimals).toString(),
+            }
+        }
+    }
+
+    return null;
+}
+const parsers: Record<string, (ixs: Instruction[]) => ParsedTransaction | null> = {
+    [`${SYSTEM_PROGRAM_ADDRESS}:2`]: handleSystemTransfer,
+    [`${TOKEN_PROGRAM_ADDRESS}:12`]: handleTokenTransferChecked,
+}
+function getDiscriminator(txData: Uint8Array) {
+    try {
+        return txData[0];
+    } catch {
+        return null;
     }
 }
 
