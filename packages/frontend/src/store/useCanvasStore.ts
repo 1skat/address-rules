@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
-import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
+import { stringifiedBigInt, type Signature, type StringifiedBigInt } from "@solana/kit";
 
 export type TokenMeta = {
     mint: string;
@@ -20,7 +20,24 @@ export type EdgeTransactionData = {
         uiAmount: string;
     }>
 }
-export type TransactionEdge = Edge<EdgeTransactionData>;
+export type TxData = {
+    status: "draft" | "pending" | "processed";
+    signature: Signature;
+    amount: StringifiedBigInt;
+    uiAmount: string;
+}
+export type EdgeTransactionDataV2 = {
+    chainId: "501" | "60";
+    selectedMint: string;
+    isDraft: boolean;
+    tokens: Record<string, {
+        tokenMeta: TokenMeta;
+        totalAmount: StringifiedBigInt;
+        uiTotalAmount: string;
+        transactions: Record<string, TxData>;
+    }>;
+}
+export type TransactionEdge = Edge<EdgeTransactionDataV2>;
 
 export type CurrencyUpdateData = {
     mint: string;
@@ -44,7 +61,7 @@ type CanvasStore = {
     setSelectedEdgeId: (edgeId: string | null) => void;
     // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
-    addConnection: (connection: Connection) => void;
+    addConnection: (connection: Connection, edgeData: EdgeTransactionDataV2) => string;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
     setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => void;
 }
@@ -74,31 +91,18 @@ export const useCanvasStore = create<CanvasStore>()(
                 console.log("removing edge:", id)
                 set((s) => ({ edges: s.edges.filter(e => e.id !== id) }))
             },
-            addConnection: (connection, data: EdgeTransactionData = { // take the current chain from the store or pass the prop of the curr selected chain
-                chainId: "501",
-                selectedMint: "11111111111111111111111111111111",
-                totals: {
-                    "11111111111111111111111111111111": {
-                        tokenMeta: {
-                            mint: "11111111111111111111111111111111",
-                            symbol: "SOL",
-                            name: "Solana",
-                            decimals: 9,
-                        },
-                        amount: stringifiedBigInt("0"),
-                        uiAmount: "0",
-                    }
-                }
-            }/*default*/) => {
-                set((s) => {
-                    return {
-                        edges: addEdge<TransactionEdge>({
-                            ...connection,
-                            type: "wallet",
-                            data,
-                        }, s.edges)
-                    }
-                });
+            addConnection: (connection, data: EdgeTransactionDataV2) => {
+                const id = crypto.randomUUID();
+                set((s) => ({
+                    edges: addEdge<TransactionEdge>({
+                        ...connection,
+                        id,
+                        type: "wallet",
+                        data,
+                    }, s.edges)
+                }));
+
+                return id;
             },
             setEdges: (change) => set((s) => {
                 console.log("set edge change:", change)
@@ -130,19 +134,19 @@ export const useCanvasStore = create<CanvasStore>()(
 
 const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): TransactionEdge => {
     const { mint, tokenMeta, amountInfo } = data;
-    const prev = e.data?.totals[mint]
-    const newAmount = (prev ? BigInt(prev.amount) : BigInt(0)) + BigInt(amountInfo.amount);
-    const newUi = (prev ? parseFloat(prev.uiAmount) : 0) + parseFloat(amountInfo.uiAmount);
+    const prev = e.data?.tokens[mint]
+    const newAmount = (prev ? BigInt(prev.totalAmount) : BigInt(0)) + BigInt(amountInfo.amount);
+    const newUi = (prev ? parseFloat(prev.uiTotalAmount) : 0) + parseFloat(amountInfo.uiAmount);
 
     return {
         ...e,
         data: {
             ...e.data,
             selectedMint: mint,
-            totals: {
-                ...e.data?.totals,
+            tokens: {
+                ...e.data?.tokens,
                 [mint]: {
-                    tokenMeta, amount: stringifiedBigInt(newAmount.toString()), uiAmount: newUi.toString(),
+                    tokenMeta, totalAmount: stringifiedBigInt(newAmount.toString()), uiTotalAmount: newUi.toString(),
                 }
             }
         }

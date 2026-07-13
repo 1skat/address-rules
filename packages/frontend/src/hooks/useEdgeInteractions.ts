@@ -1,13 +1,13 @@
 import React, { useCallback, useRef } from "react";
-import { useCanvasStore, type EdgeTransactionData, type TransactionEdge } from "../store/useCanvasStore";
+import { useCanvasStore, type EdgeTransactionDataV2, type TransactionEdge } from "../store/useCanvasStore";
 import { useToolStore } from "../store/useToolStore";
 import type { Connection } from "@xyflow/react";
-import { stringifiedBigInt } from "@solana/kit";
 
 export const useEdgeInteraction = () => {
     const removeEdge = useCanvasStore(s => s.removeEdge);
     const reconnectEdge = useCanvasStore(s => s.reconnectEdge);
     const setSelectedEdgeId = useCanvasStore(s => s.setSelectedEdgeId);
+    const addConnection = useCanvasStore(s => s.addConnection);
     const edgeReconnectSuccessful = useRef(false);
 
     const onEdgeMouseEnter = useCallback(async (ev: React.MouseEvent, edge: TransactionEdge) => {
@@ -47,24 +47,17 @@ export const useEdgeInteraction = () => {
         edgeReconnectSuccessful.current = true;
     }, [removeEdge, setSelectedEdgeId])
 
-    const addConnection = (connection: Connection, data: EdgeTransactionData) => {
-        const edgeTxData = {
+    const addConnectionEdge = (connection: Connection) => {
+        const txEdge: EdgeTransactionDataV2 = {
             chainId: "501",
             selectedMint: "11111111111111111111111111111111",
-            totals: {
-                "11111111111111111111111111111111": {
-                    tokenMeta: {
-                        mint: "11111111111111111111111111111111",
-                        symbol: "SOL",
-                        name: "Solana",
-                        decimals: 9,
-                    },
-                    amount: stringifiedBigInt("0"),
-                    uiAmount: "0",
-                }
-            }
+            isDraft: true,
+            tokens: {},
         }
+
+        const id = addConnection(connection, txEdge); // from zustand
+        console.log("id:", id);
     }
 
-    return { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick }
+    return { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick, addConnectionEdge }
 }

@@ -1,7 +1,7 @@
 import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
 import React, { useState } from "react";
-import { useCanvasStore, type CurrencyUpdateData, type EdgeTransactionData } from "../../store/useCanvasStore";
+import { useCanvasStore } from "../../store/useCanvasStore";
 import { toSmallestUnit } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
@@ -75,19 +75,18 @@ export const SendSolanaTxCard = React.memo(() => {
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address);
 
-            const { totals, selectedMint } = selectedEdge.data;
-            if (!totals[selectedMint]) {
+            const { tokens, selectedMint } = selectedEdge.data;
+            if (!tokens[selectedMint]) {
                 console.error("mint does not exist in totals for:", selectedMint)
                 return;
             }
 
-            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, totals[selectedMint].tokenMeta);
+            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, tokens[selectedMint].tokenMeta);
             const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
             const { orderId } = await sendSolanaTransaction(tx);
             subscribeOrderStatus(orderId); // might hide it in sendSolanatranscation
         } catch (err) {
             setErr(err)
-
         } finally {
             setPending(false)
         }
@@ -99,7 +98,7 @@ export const SendSolanaTxCard = React.memo(() => {
                 <label className="flex gap-1">
                     <span>Total</span>
                     <input type="number" className="border" placeholder="0" onChange={(e) => {
-                        const totals = selectedEdge.data?.totals[selectedEdge.data.selectedMint];
+                        const totals = selectedEdge.data?.tokens[selectedEdge.data.selectedMint];
                         const decimals = totals?.tokenMeta.decimals;
                         if (!decimals) return;
                         const val = toSmallestUnit(e.target.value, decimals);

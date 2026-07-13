@@ -54,7 +54,8 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    <span>{totals[selectedMint].uiAmount} {totals[selectedMint].tokenMeta.symbol}</span>
+                    {/* <span>{totals[selectedMint].uiAmount} {totals[selectedMint].tokenMeta.symbol}</span> */}
+                    <span>SOL 0</span >
                 </div>
             </EdgeLabelRenderer>
         </>

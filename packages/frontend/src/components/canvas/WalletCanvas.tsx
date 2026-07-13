@@ -47,10 +47,10 @@ const WalletCanvasInner = () => {
 
     // Edges
     const edges = useCanvasStore(s => s.edges);
-    const addConnection = useCanvasStore(s => s.addConnection);
+    // const addConnection = useCanvasStore(s => s.addConnection);
     // const setEdges = useCanvasStore(s => s.setEdges);
     const { onNodeMouseEnter } = useNodeInteraction();
-    const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick } = useEdgeInteraction();
+    const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick, addConnectionEdge } = useEdgeInteraction();
     const setSelectedEdgeId = useCanvasStore(s => s.setSelectedEdgeId);
 
 
@@ -105,8 +105,8 @@ const WalletCanvasInner = () => {
                 edges={edges}
                 onNodesChange={setNodes}
                 // onEdgesChange={setEdges} // todo: do i need it since i have addConnection
-                onConnect={addConnection}
-                onEdgesChange={ }
+                onConnect={addConnectionEdge}
+                // onEdgesChange={ }
                 onReconnectStart={onReconnectStart}
                 onReconnect={onReconnect}
                 onReconnectEnd={onReconnectEnd}

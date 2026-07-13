@@ -1,7 +1,7 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
 import { subsClient, wsClient } from "@/ws_client.js";
-import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address } from "@solana/kit";
+import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction } from "@solana/kit";
 import {
     identifyTokenInstruction,
     TOKEN_PROGRAM_ADDRESS,
@@ -12,11 +12,13 @@ import {
     parseCreateAssociatedTokenIdempotentInstruction,
 } from "@solana-program/token";
 import { identifySystemInstruction, SystemInstruction, SYSTEM_PROGRAM_ADDRESS, parseTransferSolInstruction } from "@solana-program/system";
+import { solanaRpc } from "./test_tx.js";
+import sql from "@/internal/db.js";
 
 
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
 type SignedTx = {
-    wireTx: string,
+    wireTx: Base64EncodedWireTransaction,
     blockhash: Blockhash,
     lastValidBlockHeight: string,
 }
@@ -72,7 +74,7 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
 
     const orderId = crypto.randomUUID();
     setAndPushOrderStatus(userId, orderId, { ok: true, status: "EXECUTING" });
-    processTx(userId, orderId, signedTx);
+    processTx(userId, orderId, data);
 
     return wsClient.pub(userId, {
         op,
@@ -82,8 +84,9 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
     });
 }
 
-export const processTx = async (userId: string, orderId: string, signedTx: SignedTx) => {
+export const processTx = async (userId: string, orderId: string, data: any) => {
     // zod
+    const { signedTx, edgeId } = data;
     const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
     const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
     const fullTx = {
@@ -95,6 +98,32 @@ export const processTx = async (userId: string, orderId: string, signedTx: Signe
     }
     assertIsFullySignedTransaction(fullTx);
 
+    // const simulation = await solanaRpc.simulateTransaction(signedTx.wireTx, { encoding: "base64" }).send();
+    // if (simulation.value.err){
+
+    // }
+
+    const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
+    const message = decompileTransactionMessage(compiled);
+    const parsedTx = parseTransfer(message.instructions);
+    if (!parsedTx) {
+        console.error("failed parsing tx");
+        return
+    }
+
+    await sql`
+        INSERT INTO transactions (order_id, edge_id, mint, amount, uiAmount, fee, signature, status)
+        VALUES (
+            ${orderId},
+            ${edgeId}
+            ${parsedTx.tokenMint}
+            ${parsedTx.amountInfo.amount}
+            ${parsedTx.amountInfo.uiAmount}
+            ${parsedTx.amountInfo.fee}
+            
+        )
+        `
+
     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
     if (txErr) {
@@ -102,12 +131,7 @@ export const processTx = async (userId: string, orderId: string, signedTx: Signe
         return setAndPushOrderStatus(userId, orderId, { ok: false, err: { code: errCode } });
     }
 
-    // todo: exract the value amount and send it over
-    const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
-    const message = decompileTransactionMessage(compiled);
 
-    const parsedTx = parseTransfer(message.instructions);
-    if (!parsedTx) return null;
 
     return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED", data: parsedTx });
 }
@@ -189,7 +213,7 @@ function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | nul
     const { accounts: transferCheckedAccs, data: amountInfo } = parseTransferCheckedInstruction(checkedTransfer);
     const { accounts: ataAccs } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
 
-    if (transferCheckedAccs.authority === ataAccs.payer /*from*/ && transferCheckedAccs.destination === ataAccs.ata/*to*/ && transferCheckedAccs.mint === ataAccs.mint) {
+    if (transferCheckedAccs.authority.address === ataAccs.payer.address /*from*/ && transferCheckedAccs.destination.address === ataAccs.ata.address/*to*/ && transferCheckedAccs.mint.address === ataAccs.mint.address) {
         return {
             from: transferCheckedAccs.authority.address,
             to: ataAccs.owner.address,
