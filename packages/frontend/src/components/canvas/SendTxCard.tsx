@@ -1,42 +1,29 @@
 import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
 import React, { useState } from "react";
-import { useCanvasStore } from "../../store/useCanvasStore";
-import { toSmallestUnit } from "../../lib/utils";
+import { useCanvasStore, type TokenMeta } from "../../store/useCanvasStore";
+import { toSmallestUnit, toUiAmount } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address, stringifiedBigInt } from "@solana/kit";
 import { AddressLabel } from "../AddressLabel";
 import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 
-const exampleUserPortfolioStore = [ // fetch from the snapshot, snapshot updated on new changes?
-    {
-        chainId: "501",
-        tokenMeta: {
-            mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-            symbol: "USDC",
-            name: "USDC",
-            decimals: 6,
-        },
-        amountInfo: {
-            amount: stringifiedBigInt("0"),
-            uiAmount: "0",
-        }
+
+const exampleUserPortfolioStore: Record<string, TokenMeta> = {
+    "501:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": {
+        mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+        symbol: "USDC",
+        name: "USDC",
+        decimals: 6,
     },
-    {
-        chainId: "501",
-        tokenMeta: {
-            mint: "11111111111111111111111111111111",
-            symbol: "SOL",
-            name: "Solana",
-            decimals: 9,
-        },
-        amountInfo: {
-            amount: stringifiedBigInt("0"),
-            uiAmount: "0",
-        }
+    "501:11111111111111111111111111111111": {
+        mint: "11111111111111111111111111111111",
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
     }
-];
+}
 
 export const SendSolanaTxCard = React.memo(() => {
     const activeTool = useToolStore(s => s.activeTool);
@@ -53,13 +40,17 @@ export const SendSolanaTxCard = React.memo(() => {
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
     const handlerCurrencyChange = (tokenMint: string) => {
-        console.log("token:", tokenMint);
-        const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
-        if (!token) return;
+        // const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
+        const tokenData = exampleUserPortfolioStore[`501:${tokenMint}`];
+        if (!tokenData) return;
+
         setEdgeCurrency(selectedEdge.id, {
-            mint: token.tokenMeta.mint,
-            tokenMeta: token.tokenMeta,
-            amountInfo: token.amountInfo,
+            mint: tokenData.mint,
+            tokenMeta: tokenData,
+            amountInfo: {
+                amount: stringifiedBigInt(amount.toString()),
+                uiAmount: toUiAmount(amount, tokenData.decimals),
+            },
         });
     }
 
@@ -75,16 +66,16 @@ export const SendSolanaTxCard = React.memo(() => {
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address);
 
-            const { tokens, selectedMint } = selectedEdge.data;
-            if (!tokens[selectedMint]) {
-                console.error("mint does not exist in totals for:", selectedMint)
-                return;
+            const tokenData = exampleUserPortfolioStore[`501:${selectedEdge.data.selectedMint}`];
+            if (!tokenData) {
+                console.error(`token data for ${selectedEdge.data.selectedMint} not found`);
+                return
             }
-
-            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, tokens[selectedMint].tokenMeta);
+            const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, tokenData);
             const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
-            const { orderId } = await sendSolanaTransaction(tx);
-            subscribeOrderStatus(orderId); // might hide it in sendSolanatranscation
+            const { orderId } = await sendSolanaTransaction(tx, selectedEdge.id);
+            console.log("requested", orderId);
+            subscribeOrderStatus(orderId);
         } catch (err) {
             setErr(err)
         } finally {
@@ -98,15 +89,19 @@ export const SendSolanaTxCard = React.memo(() => {
                 <label className="flex gap-1">
                     <span>Total</span>
                     <input type="number" className="border" placeholder="0" onChange={(e) => {
-                        const totals = selectedEdge.data?.tokens[selectedEdge.data.selectedMint];
-                        const decimals = totals?.tokenMeta.decimals;
+                        if (!selectedEdge.data) {
+                            console.error("edge data not found");
+                            return;
+                        }
+                        const decimals = exampleUserPortfolioStore[`501:${selectedEdge.data.selectedMint}`]?.decimals;
                         if (!decimals) return;
+
                         const val = toSmallestUnit(e.target.value, decimals);
                         if (val) setAmount(val);
                     }} />
                     <select value={selectedEdge.data?.selectedMint} onChange={(e) => handlerCurrencyChange(e.target.value)}>
-                        {exampleUserPortfolioStore.map(t => (
-                            <option key={t.tokenMeta.mint} value={t.tokenMeta.mint}>{t.tokenMeta.symbol}</option>)
+                        {Object.values(exampleUserPortfolioStore).map(td => (
+                            <option key={td.mint} value={td.mint}>{td.symbol}</option>)
                         )}
                     </select>
                 </label>

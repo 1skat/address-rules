@@ -1,20 +1,14 @@
 import { startTrackingSolanaAddress, walletStore } from "@/chain_listener.js";
 import sql from "@/internal/db.js";
 import { solanaRpc } from "@/internal/rpc.js";
-import type { Context } from "@/stream.js";
+import { toUiAmount } from "@/utils/utils.js";
 import { subsClient } from "@/ws_client.js";
 import { address, stringifiedBigInt, type Address, type Lamports, type Signature, type StringifiedBigInt, type StringifiedNumber } from "@solana/kit";
 import util from "util";
 
-// get the wallets
-// trigget update ack per wallet
-type WalletData = { // only data relevant to the client
-    walletAddress: string,
-}
-
 type UserWalletInit = {
     type: "init",
-    snapshot: Map<string, WalletData>
+    snapshot: any[],
 }
 type UserWalletUpdate = {
     type: "wallet-update";
@@ -73,7 +67,7 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
                 amountInfo: {
                     amount: stringifiedBigInt(meta.postBalances[idx]!.toString()),
                     decimals: 9,
-                    uiAmount: meta.postBalances[idx]!.toString(),
+                    uiAmount: toUiAmount(meta.postBalances[idx]!, 9),
                 }
             })
         }
@@ -324,18 +318,15 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
 
     const msg: UserWalletInit = {
         type: "init",
-        snapshot: allUserWalletTokens,
+        snapshot: allUserWalletTokens, // {chainId, oken_address, symbol, name, decimals}[]
     }
     subsClient.push(userId, topic, msg);
 
     allUserWalletTokens.forEach(wt => startTrackingSolanaAddress(wt.wallet_address, async (txData: GetTranscationResult) => {
-        console.log("entered the data handler", util.inspect(txData, { depth: null }));
         // note: callbackHandler is used once per signature to update all the wallets inside of it
         // updates are for the UI only, dont store ata accounts or balances
         const changes = parseTxBalancesChanges(txData); // can have multple updates from different wallets
-        console.log("balance changes:", changes)
         const walletUpdateMsg = await getUpdatedTokenBalances(changes, allUserTokens, (newTokenData: any) => addNewTokenToUserWallet(userId, wt.wallet_address, newTokenData)); // updates is a list of userTokens with updates balances
-        console.log("token updates:", util.inspect(walletUpdateMsg, { depth: null }));
 
         return subsClient.push(userId, topic, walletUpdateMsg);
     }));

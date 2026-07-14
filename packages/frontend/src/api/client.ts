@@ -3,9 +3,10 @@ import { useAuthStore } from "../store/authStore";
 import { useOnbordingStore } from "../store/onboardingStore";
 import { clearMnemonic } from "../lib/vault";
 import { deriveWallet } from "../lib/bip39";
-import type { XYPosition } from "@xyflow/react";
+import type { Connection, XYPosition } from "@xyflow/react";
 import type { Base64EncodedWireTransaction, Blockhash, Signature } from "@solana/kit"
 import { wipeSeed } from "../lib/seed";
+import type { EdgeTransactionDataV2 } from "../store/useCanvasStore";
 
 const BASE_URL = "http://localhost:3000"
 
@@ -93,6 +94,23 @@ export const logout = async () => {
         useOnbordingStore.getState().setStep("unauthenticated");
         wipeSeed()
     }
+}
+
+export const createEdge = async (edgeId: string, connection: Connection, edgeData: EdgeTransactionDataV2): Promise<void> => {
+    const resp = await apiFetch("/edges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            edgeId,
+            chainId: edgeData.chainId,
+            source: connection.source,
+            target: connection.target,
+            sourceHandle: connection.sourceHandle,
+            targetHandle: connection.targetHandle,
+        }),
+    });
+
+    if (resp.status !== 201) throw new Error("Failed creating edge");
 }
 
 export const createWallet = async (chainCode: string, alias: string | null, position: XYPosition) => {

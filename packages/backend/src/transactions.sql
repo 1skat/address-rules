@@ -22,8 +22,8 @@
 --     amount_lamports BIGINT NOT NULL
 -- );
 
-CREATE TYPE handle_side AS ENUM ("left", "right");
-CREATE TYPE tx_status AS ENUM ("pending", "processed");
+CREATE TYPE handle_side AS ENUM ('left', 'right');
+CREATE TYPE tx_status AS ENUM ('pending', 'processed', 'failed');
 
 CREATE TABLE edges (
     id UUID PRIMARY KEY,
@@ -41,9 +41,10 @@ CREATE TABLE transactions (
     edge_id UUID NOT NULl REFERENCES edges(id) ON DELETE RESTRICT, -- prevent removing txs on edge delete
     mint TEXT NOT NULL,
     amount TEXT NOT NULL, -- save as TEXT to prevent overflow, passed as stringifiedBigInt
-    uiAmount TEXT NOT NULL,
-    fee TEXT,
+    ui_amount TEXT NOT NULL,
+    fee_amount TEXT NOT NULL,
+    ui_fee_amount TEXT NOT NULL,
     signature TEXT NOT NULL,
-    status tx_status NOT NULL DEFAULT "pending",
+    status tx_status NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 )

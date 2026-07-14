@@ -1,7 +1,7 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
 import { subsClient, wsClient } from "@/ws_client.js";
-import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction } from "@solana/kit";
+import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction, getBase58Decoder } from "@solana/kit";
 import {
     identifyTokenInstruction,
     TOKEN_PROGRAM_ADDRESS,
@@ -12,7 +12,8 @@ import {
     parseCreateAssociatedTokenIdempotentInstruction,
 } from "@solana-program/token";
 import { identifySystemInstruction, SystemInstruction, SYSTEM_PROGRAM_ADDRESS, parseTransferSolInstruction } from "@solana-program/system";
-import { solanaRpc } from "./test_tx.js";
+import { inspect } from "util";
+import { toUiAmount } from "@/utils/utils.js";
 import sql from "@/internal/db.js";
 
 
@@ -56,7 +57,7 @@ const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderSta
     orderStatusStore.set(orderId, status);
     if (!status.ok) return subsClient.pushErrAndDrop(userId, "order_status", status.err);
 
-    return subsClient.push(userId, "order_status", status); // push the whole status object
+    return subsClient.push(userId, "order_status", status);
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
@@ -68,7 +69,7 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
             op,
             id,
             status: 400,
-            error: { code: "MISSING_TX", message: "Transaction required" }
+            error: { code: "MISSING_TX", message: "Transaction required" },
         });
     }
 
@@ -100,30 +101,38 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
 
     // const simulation = await solanaRpc.simulateTransaction(signedTx.wireTx, { encoding: "base64" }).send();
     // if (simulation.value.err){
-
     // }
 
     const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
     const message = decompileTransactionMessage(compiled);
-    const parsedTx = parseTransfer(message.instructions);
+    const parsedTx = parseTransfer(message.instructions, compiled.header);
     if (!parsedTx) {
         console.error("failed parsing tx");
         return
     }
 
-    await sql`
-        INSERT INTO transactions (order_id, edge_id, mint, amount, uiAmount, fee, signature, status)
+    const sig = fullTx.signatures[parsedTx.from]
+    if (!sig) {
+        console.error("expected signature not found for sender", parsedTx.from);
+        return;
+    }
+    const [tx] = await sql`
+        INSERT INTO transactions (order_id, edge_id, mint, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
         VALUES (
             ${orderId},
-            ${edgeId}
-            ${parsedTx.tokenMint}
-            ${parsedTx.amountInfo.amount}
-            ${parsedTx.amountInfo.uiAmount}
-            ${parsedTx.amountInfo.fee}
-            
+            ${edgeId},
+            ${parsedTx.tokenMint},
+            ${parsedTx.amountInfo.amount},
+            ${parsedTx.amountInfo.uiAmount},
+            ${parsedTx.amountInfo.feeAmount},
+            ${parsedTx.amountInfo.uiFeeAmount},
+            ${getBase58Decoder().decode(sig)},
+            'pending'
         )
-        `
+        RETURNING *; 
+        `;
 
+    console.log("inserted tx", tx);
     const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
     if (txErr) {
@@ -131,28 +140,8 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         return setAndPushOrderStatus(userId, orderId, { ok: false, err: { code: errCode } });
     }
 
-
-
     return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED", data: parsedTx });
 }
-
-// export const subscribeOrderStatus = async (userId: string, subId: string, payload: any) => {
-//     const { orderId } = payload;
-//     if (!orderId) return;
-
-//     subsClient.sub(userId, subId, orderId); // userId, subId, "order_status"
-
-//     const status = orderStatusStore.get(orderId);
-
-//     if (status) {
-//         if (status.ok) {
-//             // return subsClient.push(userId, orderId , status.status);
-//             return subsClient.push(userId, "order_status")
-//         } else {
-//             return subsClient.pushErrAndDrop(userId, orderId, status.err);
-//         }
-//     }
-// }
 
 export const ackSubscribedOrderStatus = async (userId: string, topic: string, payload: any) => {
     const { orderId } = payload;
@@ -170,22 +159,32 @@ export const ackSubscribedOrderStatus = async (userId: string, topic: string, pa
     return subsClient.pushErrAndDrop(userId, topic, { code: "ORDER_STATUS_NOT_FOUND" });
 }
 
-
 type ParsedTransaction = {
-    from: Address, to: Address, tokenMint: Address, amountInfo: { amount: StringifiedBigInt, uiAmount: string }
+    from: Address;
+    to: Address;
+    tokenMint: Address;
+    amountInfo: {
+        amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
+    }
 }
-const parseTransfer = (instructions: Instruction[]): ParsedTransaction | null => {
+
+const parseTransfer = (instructions: Instruction[], header: any): ParsedTransaction | null => {
     for (const ix of instructions) {
         const key = `${ix.programAddress}:${getDiscriminator(ix.data)}`
         const handler = parsers[key];
 
         if (!handler) continue
 
-        const result = handler(instructions);
-        if (!result) return null
+        let parsedTx = handler(instructions);
+        if (!parsedTx) return null
 
-        return result;
+        parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(header.numSignerAccounts)).toString());
+        parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(header.numSignerAccounts), 9);
+
+        return parsedTx;
     }
+
+    return null;
 }
 function handleSystemTransfer(ixs: Instruction[]) {
     const solTransfer = ixs.find(ix => identifySystemInstruction(ix) === SystemInstruction.TransferSol);
@@ -211,7 +210,7 @@ function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | nul
     if (!ataIx) return null;
 
     const { accounts: transferCheckedAccs, data: amountInfo } = parseTransferCheckedInstruction(checkedTransfer);
-    const { accounts: ataAccs } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
+    const { accounts: ataAccs, data: ataInfo } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
 
     if (transferCheckedAccs.authority.address === ataAccs.payer.address /*from*/ && transferCheckedAccs.destination.address === ataAccs.ata.address/*to*/ && transferCheckedAccs.mint.address === ataAccs.mint.address) {
         return {
@@ -227,6 +226,7 @@ function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | nul
 
     return null;
 }
+
 const parsers: Record<string, (ixs: Instruction[]) => ParsedTransaction | null> = {
     [`${SYSTEM_PROGRAM_ADDRESS}:2`]: handleSystemTransfer,
     [`${TOKEN_PROGRAM_ADDRESS}:12`]: handleTokenTransferChecked,

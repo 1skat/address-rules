@@ -7,10 +7,6 @@ import { getSignatureFromTransaction } from '@solana/kit';
 
 const txRouter = Router();
 
-txRouter.get("/", authenticate, async (req, res) => {
-    const [txs] = await sql`SELECT FROM wallets `
-});
-
 // txRouter.post("/send", authenticate, async (req, res) => {
 //     const { signedTx } = req.body;
 //     if (!signedTx) {

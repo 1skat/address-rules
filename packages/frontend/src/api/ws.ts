@@ -160,12 +160,15 @@ const sendWsMessage = async<T>(route: string, payload: object): Promise<T> => {
     return promise;
 }
 
-export const sendSolanaTransaction = async (signedTx: {
-    wireTx: Base64EncodedWireTransaction;
-    blockhash: any;
-    lastValidBlockHeight: any;
-}) =>
-    sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx });
+export const sendSolanaTransaction = async (
+    signedTx: {
+        wireTx: Base64EncodedWireTransaction;
+        blockhash: any;
+        lastValidBlockHeight: any;
+    },
+    edgeId: string,
+) =>
+    sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx, edgeId });
 
 
 type ParsedTransaction = {

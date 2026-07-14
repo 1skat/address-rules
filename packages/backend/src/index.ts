@@ -15,6 +15,7 @@ import cookieParser from "cookie-parser";
 import txRouter from './transactions.js';
 import http from 'http';
 import { initWs } from './stream.js';
+import edgeRouter from './edges.js';
 
 export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -47,7 +48,8 @@ const sessionCache = new LRUCache<string, boolean>({
 });
 
 
-app.use("/transactions", txRouter)
+app.use("/transactions", txRouter);
+app.use("/edges", edgeRouter);
 
 app.post("/account/logout", authenticate, async (req, res) => {
     await redis.zRem(`user_sessions:${req.user.sub}`, req.user.parent_id);
@@ -198,6 +200,7 @@ app.post("/wallets", authenticate, async (req, res) => {
             ${posY})
             RETURNING *
             `;
+
             if (!newWallet) throw new Error("Insert wallet failed");
 
             // add default Solana token to a fresh wallet
@@ -257,7 +260,6 @@ const server = http.createServer(app);
 
 initWs(server)
 server.listen(3000);
-// app.listen(3000);
 console.log("Express server is running on port 3000")
 
 

@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from "react";
 import { useCanvasStore, type EdgeTransactionDataV2, type TransactionEdge } from "../store/useCanvasStore";
 import { useToolStore } from "../store/useToolStore";
 import type { Connection } from "@xyflow/react";
+import { createEdge } from "../api/client";
 
 export const useEdgeInteraction = () => {
     const removeEdge = useCanvasStore(s => s.removeEdge);
@@ -47,7 +48,7 @@ export const useEdgeInteraction = () => {
         edgeReconnectSuccessful.current = true;
     }, [removeEdge, setSelectedEdgeId])
 
-    const addConnectionEdge = (connection: Connection) => {
+    const addConnectionEdge = async (connection: Connection) => {
         const txEdge: EdgeTransactionDataV2 = {
             chainId: "501",
             selectedMint: "11111111111111111111111111111111",
@@ -56,7 +57,14 @@ export const useEdgeInteraction = () => {
         }
 
         const id = addConnection(connection, txEdge); // from zustand
-        console.log("id:", id);
+        try {
+            await createEdge(id, connection, txEdge)
+        } catch (err) {
+            console.error(err);
+            edgeReconnectSuccessful.current = false;
+            removeEdge(id);
+            return;
+        }
     }
 
     return { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick, addConnectionEdge }

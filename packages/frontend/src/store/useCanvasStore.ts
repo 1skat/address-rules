@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 import { stringifiedBigInt, type Signature, type StringifiedBigInt } from "@solana/kit";
+import { inspect } from "util";
 
 export type TokenMeta = {
     mint: string;
