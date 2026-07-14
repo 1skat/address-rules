@@ -172,12 +172,22 @@ export const sendSolanaTransaction = async (
 
 
 type ParsedTransaction = {
-    from: Address, to: Address, tokenMint: Address, amountInfo: { amount: StringifiedBigInt, uiAmount: string }
+    from: Address;
+    to: Address;
+    tokenMint: Address;
+    amountInfo: {
+        amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
+    }
 }
 type OrderStatus =
     | { ok: true; status: "FILLED", data: ParsedTransaction }
     | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
     | { ok: false; err: { code: string; message?: string } };
+
+type TransactionStatusUpdate = {
+    edgeId: string;
+    orderStatus: OrderStatus;
+}
 
 export const subscribeOrderStatus = async (orderId: string) => {
     const subId = crypto.randomUUID();
@@ -202,8 +212,7 @@ export const subscribeOrderStatus = async (orderId: string) => {
                 break; // still processing todo: set zustand states here
             }
             case "FILLED": {
-
-                // useCanvasStore.getState().setEdgeCurrency()
+                useCanvasStore.getState().setEdgeCurrency()
                 unsubscribe();
                 break;
             }

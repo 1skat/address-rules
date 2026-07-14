@@ -23,15 +23,24 @@ type SignedTx = {
     blockhash: Blockhash,
     lastValidBlockHeight: string,
 }
+
+type UpdateError = { code: string; message?: string };
+
 type OrderStatus =
     | { ok: true; status: "FILLED", data: ParsedTransaction }
     | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
-    | { ok: false; err: { code: string; message?: string } };
+    | { ok: false; err: UpdateError };
+
+type TransactionStatusUpdate = {
+    edgeId: string;
+    orderStatus: OrderStatus;
+}
 
 const orderStatusStore = {
     store: new Map<string, OrderStatus>(),
     timers: new Map<string, NodeJS.Timeout>(),
 
+    // setAndPush(status: "EXECUTING" | "FILLED") => void,
     scheduleCleanup(orderId: string) {
         if (this.timers.has(orderId)) this.timers.delete(orderId);
 
@@ -51,6 +60,7 @@ const orderStatusStore = {
         return this.store.get(orderId);
     }
 }
+
 
 // helpers
 const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderStatus): void => {
