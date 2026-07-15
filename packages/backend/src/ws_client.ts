@@ -1,6 +1,6 @@
 import type WebSocket from "ws";
 
-type SocketError = {
+export type SocketError = {
     code: string;
     message?: string;
 }
@@ -86,7 +86,7 @@ export const subsClient = {
     //         }
     //     }
     // },
-    pushErrAndDrop: (userId: string, topic: string, error: SocketError) => {
+    pushErrAndDrop: (userId: string, topic: string, error: any) => {
         const userConns = conns.get(userId);
         if (!userConns) {
             console.log(`push - Ws for userId: ${userId} not found, returning`);
@@ -99,7 +99,7 @@ export const subsClient = {
 
             for (const [subId, subTopic] of userSubs) {
                 if (topic === subTopic) {
-                    pub(userId, { op: 7, id: subId, status: 500, error, });
+                    pub(userId, { op: 7, id: subId, status: 500, error });
 
                     userSubs.delete(subId)
                 }

@@ -8,8 +8,8 @@ export type TokenMeta = {
     mint: string;
     symbol: string;
     name: string;
-    iconURI?: string;
     decimals: number;
+    iconURI?: string;
 }
 
 export type EdgeTransactionData = {
@@ -21,12 +21,6 @@ export type EdgeTransactionData = {
         uiAmount: string;
     }>
 }
-export type TxData = {
-    status: "draft" | "pending" | "processed";
-    signature: Signature;
-    amount: StringifiedBigInt;
-    uiAmount: string;
-}
 export type EdgeTransactionDataV2 = {
     chainId: "501" | "60";
     selectedMint: string;
@@ -35,12 +29,12 @@ export type EdgeTransactionDataV2 = {
         tokenMeta: TokenMeta;
         totalAmount: StringifiedBigInt;
         uiTotalAmount: string;
-        transactions: Record<string, TxData>;
     }>;
 }
 export type TransactionEdge = Edge<EdgeTransactionDataV2>;
 
 export type CurrencyUpdateData = {
+    signature: string;
     mint: string;
     tokenMeta: TokenMeta;
     amountInfo: {
@@ -135,12 +129,12 @@ export const useCanvasStore = create<CanvasStore>()(
 
 const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): TransactionEdge => {
     const { mint, tokenMeta, amountInfo } = data;
-    const prev = e.data?.tokens[mint]
+    const prev = e.data?.tokens[mint] // null on new
     const newAmount = (prev ? BigInt(prev.totalAmount) : BigInt(0)) + BigInt(amountInfo.amount);
     const newUi = (prev ? parseFloat(prev.uiTotalAmount) : 0) + parseFloat(amountInfo.uiAmount);
 
     return {
-        ...e,
+        ...e /*TranasctionEdge*/,
         data: {
             ...e.data,
             selectedMint: mint,
@@ -148,7 +142,7 @@ const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): Transac
                 ...e.data?.tokens,
                 [mint]: {
                     tokenMeta, totalAmount: stringifiedBigInt(newAmount.toString()), uiTotalAmount: newUi.toString(),
-                }
+                },
             }
         }
     }

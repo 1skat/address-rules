@@ -75,7 +75,7 @@ export const SendSolanaTxCard = React.memo(() => {
             const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
             const { orderId } = await sendSolanaTransaction(tx, selectedEdge.id);
             console.log("requested", orderId);
-            subscribeOrderStatus(orderId);
+            subscribeOrderStatus(orderId, selectedEdge.id);
         } catch (err) {
             setErr(err)
         } finally {

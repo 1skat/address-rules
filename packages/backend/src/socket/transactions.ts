@@ -1,7 +1,7 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
-import { subsClient, wsClient } from "@/ws_client.js";
-import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction, getBase58Decoder } from "@solana/kit";
+import { subsClient, wsClient, type SocketError } from "@/ws_client.js";
+import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction, getBase58Decoder, type CompiledTransactionMessage, type Signature } from "@solana/kit";
 import {
     identifyTokenInstruction,
     TOKEN_PROGRAM_ADDRESS,
@@ -16,31 +16,25 @@ import { inspect } from "util";
 import { toUiAmount } from "@/utils/utils.js";
 import sql from "@/internal/db.js";
 
-
 const TERMINAL_TTL_MS = 2 * 60 * 1000;
-type SignedTx = {
-    wireTx: Base64EncodedWireTransaction,
-    blockhash: Blockhash,
-    lastValidBlockHeight: string,
+
+export type TokenMeta = {
+    mint: string;
+    symbol: string;
+    name: string;
+    iconURI?: string;
+    decimals: number;
 }
 
-type UpdateError = { code: string; message?: string };
+export type OrderStatus =
+    | { edgeId: string, status: "FILLED" | "EXECUTING", data: ParsedTransaction }
+    | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
 
-type OrderStatus =
-    | { ok: true; status: "FILLED", data: ParsedTransaction }
-    | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
-    | { ok: false; err: UpdateError };
-
-type TransactionStatusUpdate = {
-    edgeId: string;
-    orderStatus: OrderStatus;
-}
 
 const orderStatusStore = {
     store: new Map<string, OrderStatus>(),
     timers: new Map<string, NodeJS.Timeout>(),
 
-    // setAndPush(status: "EXECUTING" | "FILLED") => void,
     scheduleCleanup(orderId: string) {
         if (this.timers.has(orderId)) this.timers.delete(orderId);
 
@@ -54,24 +48,23 @@ const orderStatusStore = {
     set(orderId: string, status: OrderStatus) {
         this.store.set(orderId, status);
 
-        if (!status.ok || status.status !== "EXECUTING") this.scheduleCleanup(orderId);
+        if (status.status !== "EXECUTING") this.scheduleCleanup(orderId);
     },
     get(orderId: string) {
         return this.store.get(orderId);
     }
 }
 
-
 // helpers
-const setAndPushOrderStatus = (userId: string, orderId: string, status: OrderStatus): void => {
-    orderStatusStore.set(orderId, status);
-    if (!status.ok) return subsClient.pushErrAndDrop(userId, "order_status", status.err);
+const setAndPushOrderStatus = (userId: string, orderId: string, os: OrderStatus): void => {
+    orderStatusStore.set(orderId, os);
+    if (os.status === "EXECUTION_FAILED") return subsClient.pushErrAndDrop(userId, "order_status", os.err);
 
     return subsClient.push(userId, "order_status", status);
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
-    const { signedTx } = data;
+    const { signedTx, edgeId } = data;
     const op = 9;
 
     if (!signedTx) {
@@ -84,7 +77,6 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
     }
 
     const orderId = crypto.randomUUID();
-    setAndPushOrderStatus(userId, orderId, { ok: true, status: "EXECUTING" });
     processTx(userId, orderId, data);
 
     return wsClient.pub(userId, {
@@ -98,105 +90,109 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
 export const processTx = async (userId: string, orderId: string, data: any) => {
     // zod
     const { signedTx, edgeId } = data;
-    const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
-    const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
-    const fullTx = {
-        ...decodedWireTx,
-        lifetimeConstraint: {
-            blockhash: signedTx.blockhash,
-            lastValidBlockHeight: BigInt(signedTx.lastValidBlockHeight),
+
+    try {
+        const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
+        const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
+        const fullTx = {
+            ...decodedWireTx,
+            lifetimeConstraint: {
+                blockhash: signedTx.blockhash,
+                lastValidBlockHeight: BigInt(signedTx.lastValidBlockHeight),
+            }
         }
-    }
-    assertIsFullySignedTransaction(fullTx);
+        assertIsFullySignedTransaction(fullTx);
 
-    // const simulation = await solanaRpc.simulateTransaction(signedTx.wireTx, { encoding: "base64" }).send();
-    // if (simulation.value.err){
-    // }
+        const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
+        let parsedTx = parseTransfer(compiled);
+        if (!parsedTx) {
+            console.error("failed parsing tx");
+            return
+        }
 
-    const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
-    const message = decompileTransactionMessage(compiled);
-    const parsedTx = parseTransfer(message.instructions, compiled.header);
-    if (!parsedTx) {
-        console.error("failed parsing tx");
-        return
-    }
-
-    const sig = fullTx.signatures[parsedTx.from]
-    if (!sig) {
-        console.error("expected signature not found for sender", parsedTx.from);
-        return;
-    }
-    const [tx] = await sql`
+        const sigBytes = fullTx.signatures[parsedTx.from]
+        if (!sigBytes) {
+            console.error("expected signature not found for sender", parsedTx.from);
+            return;
+        }
+        const sig = getBase58Decoder().decode(sigBytes) as Signature;
+        parsedTx.signature = sig;
+        const [tx] = await sql`
         INSERT INTO transactions (order_id, edge_id, mint, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
         VALUES (
             ${orderId},
             ${edgeId},
-            ${parsedTx.tokenMint},
+            ${parsedTx.tokenMeta.mint},
             ${parsedTx.amountInfo.amount},
             ${parsedTx.amountInfo.uiAmount},
             ${parsedTx.amountInfo.feeAmount},
             ${parsedTx.amountInfo.uiFeeAmount},
-            ${getBase58Decoder().decode(sig)},
+            ${sig},
             'pending'
-        )
-        RETURNING *; 
-        `;
+            )
+            RETURNING *; 
+            `;
 
-    console.log("inserted tx", tx);
-    const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
+        // console.log("inserted tx", tx);
+        setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTING", data: parsedTx }); // might already send the sig
+        const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
-    if (txErr) {
-        const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
-        return setAndPushOrderStatus(userId, orderId, { ok: false, err: { code: errCode } });
+        if (txErr) {
+            const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
+            return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: errCode } });
+        }
+
+        return setAndPushOrderStatus(userId, orderId, { edgeId, status: "FILLED", data: parsedTx });
+    } catch (err) {
+        return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
     }
-
-    return setAndPushOrderStatus(userId, orderId, { ok: true, status: "FILLED", data: parsedTx });
 }
 
 export const ackSubscribedOrderStatus = async (userId: string, topic: string, payload: any) => {
-    const { orderId } = payload;
-    if (!orderId) return;
-
+    const { orderId, edgeId } = payload;
     const status = orderStatusStore.get(orderId);
 
     if (status) {
-        if (status.ok) {
-            return subsClient.push(userId, orderId, status);
+        if (status.status !== "EXECUTION_FAILED") {
+            return subsClient.push(userId, topic, status);
         }
         return subsClient.push(userId, topic, status);
     }
-    console.error("ackSubscribedOrderStatus: order status's value empty")
-    return subsClient.pushErrAndDrop(userId, topic, { code: "ORDER_STATUS_NOT_FOUND" });
+    const orderStatus: OrderStatus = { edgeId, status: "EXECUTION_FAILED", err: { code: "ORDER_STATUS_NOT_FOUND" } };
+    return subsClient.pushErrAndDrop(userId, topic, orderStatus);
 }
 
 type ParsedTransaction = {
     from: Address;
     to: Address;
-    tokenMint: Address;
+    tokenMeta: TokenMeta,
     amountInfo: {
         amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
-    }
+    };
+    signature: Signature;
 }
 
-const parseTransfer = (instructions: Instruction[], header: any): ParsedTransaction | null => {
-    for (const ix of instructions) {
+const parseTransfer = (ctm: CompiledTransactionMessage): ParsedTransaction | null => {
+    const message = decompileTransactionMessage(ctm);
+    for (const ix of message.instructions) {
         const key = `${ix.programAddress}:${getDiscriminator(ix.data)}`
         const handler = parsers[key];
 
         if (!handler) continue
 
-        let parsedTx = handler(instructions);
+        const parsedTx = handler(message.instructions);
         if (!parsedTx) return null
 
-        parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(header.numSignerAccounts)).toString());
-        parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(header.numSignerAccounts), 9);
+        // parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(ctm.header.numSignerAccounts)).toString());
+        // parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(ctm.header.numSignerAccounts), 9);
 
         return parsedTx;
     }
 
     return null;
 }
-function handleSystemTransfer(ixs: Instruction[]) {
+
+function handleSystemTransfer(ixs: Instruction[]): ParsedTransaction | null {
     const solTransfer = ixs.find(ix => identifySystemInstruction(ix) === SystemInstruction.TransferSol);
     if (!solTransfer) return null;
 
@@ -205,14 +201,19 @@ function handleSystemTransfer(ixs: Instruction[]) {
     return {
         from: parsed.accounts.source.address,
         to: parsed.accounts.destination.address,
-        tokenMint: address("11111111111111111111111111111111"),
+        tokenMeta: {
+            mint: "11111111111111111111111111111111",
+            symbol: "SOL",
+            name: "Solana",
+            decimals: 9
+        },
         amountInfo: {
             amount: stringifiedBigInt(parsed.data.amount.toString()),
             uiAmount: (Number(parsed.data.amount) / 10 ** 9).toString(),
         }
     }
 }
-function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | null {
+async function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | null {
     const checkedTransfer = ixs.find(ix => identifyTokenInstruction(ix) === TokenInstruction.TransferChecked)
     if (!checkedTransfer) return null;
 
@@ -222,11 +223,23 @@ function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | nul
     const { accounts: transferCheckedAccs, data: amountInfo } = parseTransferCheckedInstruction(checkedTransfer);
     const { accounts: ataAccs, data: ataInfo } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
 
+    const [token] = await sql`SELECT chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501' AND address = ${transferCheckedAccs.mint.address}`;
+    if (!token) {
+        // fetch the metadata from chain
+        console.error("token metadata not found")
+        return null;
+    }
+
     if (transferCheckedAccs.authority.address === ataAccs.payer.address /*from*/ && transferCheckedAccs.destination.address === ataAccs.ata.address/*to*/ && transferCheckedAccs.mint.address === ataAccs.mint.address) {
         return {
             from: transferCheckedAccs.authority.address,
             to: ataAccs.owner.address,
-            tokenMint: transferCheckedAccs.mint.address,
+            tokenMeta: {
+                mint: token.address,
+                symbol: token.symbol,
+                name: token.name,
+                decimals: token.decimals,
+            },
             amountInfo: {
                 amount: stringifiedBigInt(amountInfo.amount.toString()),
                 uiAmount: (Number(amountInfo.amount) / 10 ** amountInfo.decimals).toString(),

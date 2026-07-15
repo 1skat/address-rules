@@ -179,17 +179,18 @@ type ParsedTransaction = {
         amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
     }
 }
-type OrderStatus =
-    | { ok: true; status: "FILLED", data: ParsedTransaction }
-    | { ok: true; status: "EXECUTING" | "EXECUTION_FAILED" }
-    | { ok: false; err: { code: string; message?: string } };
 
-type TransactionStatusUpdate = {
-    edgeId: string;
-    orderStatus: OrderStatus;
+type SocketError = {
+    code: string;
+    message?: string;
 }
+type OrderStatus =
+    | { ok: true; edgeId: string, status: "FILLED", data: ParsedTransaction }
+    | { ok: true; edgeId: string, status: "EXECUTING" | "EXECUTION_FAILED" }
+    | { ok: false, edgeId: string, err: SocketError };
 
-export const subscribeOrderStatus = async (orderId: string) => {
+
+export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
     const subId = crypto.randomUUID();
     const route = "/orders/subscribe-status";
 
@@ -212,7 +213,14 @@ export const subscribeOrderStatus = async (orderId: string) => {
                 break; // still processing todo: set zustand states here
             }
             case "FILLED": {
-                useCanvasStore.getState().setEdgeCurrency()
+                const { edgeId, data } = msg;
+
+                useCanvasStore.getState().setEdgeCurrency(
+                    edgeId, {
+                    mint: data.tokenMint,
+                }
+
+                )
                 unsubscribe();
                 break;
             }
@@ -231,7 +239,7 @@ export const subscribeOrderStatus = async (orderId: string) => {
         op: 4,
         id: subId,
         route,
-        payload: { orderId },
+        payload: { orderId, edgeId },
     });
 }
 
