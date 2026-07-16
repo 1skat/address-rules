@@ -1,3 +1,6 @@
 DROP TABLE wallets CASCADE;
 DROP TABLE tokens CASCADE;
 DROP TABLE wallet_tokens CASCADE;
+DROP TABLE edges CASCADE;
+DROP TABLE transactions CASCADE;
+

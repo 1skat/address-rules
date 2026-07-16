@@ -1,8 +1,9 @@
 import React, { useCallback, useRef } from "react";
-import { useCanvasStore, type EdgeTransactionDataV2, type TransactionEdge } from "../store/useCanvasStore";
+import { useCanvasStore, type EdgeTransactionData, type TransactionEdge } from "../store/useCanvasStore";
 import { useToolStore } from "../store/useToolStore";
 import type { Connection } from "@xyflow/react";
 import { createEdge } from "../api/client";
+import { stringifiedBigInt } from "@solana/kit";
 
 export const useEdgeInteraction = () => {
     const removeEdge = useCanvasStore(s => s.removeEdge);
@@ -49,11 +50,22 @@ export const useEdgeInteraction = () => {
     }, [removeEdge, setSelectedEdgeId])
 
     const addConnectionEdge = async (connection: Connection) => {
-        const txEdge: EdgeTransactionDataV2 = {
+        const txEdge: EdgeTransactionData = {
             chainId: "501",
             selectedMint: "11111111111111111111111111111111",
-            isDraft: true,
-            tokens: {},
+            state: "draft", // state: "draft", "pending", "processed"
+            tokens: {
+                ["11111111111111111111111111111111"]: {
+                    tokenMeta: {
+                        mint: "11111111111111111111111111111111",
+                        symbol: "SOL",
+                        name: "Solana",
+                        decimals: 9,
+                    },
+                    totalAmount: stringifiedBigInt("0"),
+                    uiTotalAmount: "0",
+                }
+            },
         }
 
         const id = addConnection(connection, txEdge); // from zustand

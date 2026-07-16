@@ -89,13 +89,12 @@ export const subsClient = {
     pushErrAndDrop: (userId: string, topic: string, error: any) => {
         const userConns = conns.get(userId);
         if (!userConns) {
-            console.log(`push - Ws for userId: ${userId} not found, returning`);
             return;
         }
 
         for (const conn of userConns) {
             const userSubs = subscriptions.get(conn)
-            if (!userSubs) continue; // ws - 1 has, ws - 2 has, ws - 3 no
+            if (!userSubs) continue;
 
             for (const [subId, subTopic] of userSubs) {
                 if (topic === subTopic) {

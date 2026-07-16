@@ -41,7 +41,7 @@ export const SendSolanaTxCard = React.memo(() => {
 
     const handlerCurrencyChange = (tokenMint: string) => {
         // const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
-        const tokenData = exampleUserPortfolioStore[`501:${tokenMint}`];
+        const tokenData = exampleUserPortfolioStore[`501:${tokenMint}`]; // fetch token data from the db
         if (!tokenData) return;
 
         setEdgeCurrency(selectedEdge.id, {

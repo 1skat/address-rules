@@ -12,22 +12,24 @@ import {
     parseCreateAssociatedTokenIdempotentInstruction,
 } from "@solana-program/token";
 import { identifySystemInstruction, SystemInstruction, SYSTEM_PROGRAM_ADDRESS, parseTransferSolInstruction } from "@solana-program/system";
-import { inspect } from "util";
-import { toUiAmount } from "@/utils/utils.js";
 import sql from "@/internal/db.js";
+import { toUiAmount } from "@/utils/utils.js";
+import { inspect } from "util";
 
-const TERMINAL_TTL_MS = 2 * 60 * 1000;
+
+const TERMINAL_TX_TTL_MS = 2 * 60 * 1000;
 
 export type TokenMeta = {
     mint: string;
     symbol: string;
     name: string;
-    iconURI?: string;
     decimals: number;
+    iconURI?: string;
 }
 
 export type OrderStatus =
-    | { edgeId: string, status: "FILLED" | "EXECUTING", data: ParsedTransaction }
+    | { edgeId: string, status: "EXECUTING" }
+    | { edgeId: string, status: "FILLED", data: ParsedTransaction }
     | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
@@ -36,12 +38,13 @@ const orderStatusStore = {
     timers: new Map<string, NodeJS.Timeout>(),
 
     scheduleCleanup(orderId: string) {
-        if (this.timers.has(orderId)) this.timers.delete(orderId);
+        const existing = this.timers.get(orderId);
+        if (existing) clearTimeout(existing);
 
         const timer = setTimeout(() => {
             this.store.delete(orderId)
             this.timers.delete(orderId);
-        }, TERMINAL_TTL_MS);
+        }, TERMINAL_TX_TTL_MS);
 
         this.timers.set(orderId, timer);
     },
@@ -60,7 +63,7 @@ const setAndPushOrderStatus = (userId: string, orderId: string, os: OrderStatus)
     orderStatusStore.set(orderId, os);
     if (os.status === "EXECUTION_FAILED") return subsClient.pushErrAndDrop(userId, "order_status", os.err);
 
-    return subsClient.push(userId, "order_status", status);
+    return subsClient.push(userId, "order_status", os);
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
@@ -77,6 +80,8 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
     }
 
     const orderId = crypto.randomUUID();
+
+    setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTING" });
     processTx(userId, orderId, data);
 
     return wsClient.pub(userId, {
@@ -104,7 +109,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         assertIsFullySignedTransaction(fullTx);
 
         const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
-        let parsedTx = parseTransfer(compiled);
+        let parsedTx = await parseTransfer(compiled);
         if (!parsedTx) {
             console.error("failed parsing tx");
             return
@@ -117,6 +122,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         }
         const sig = getBase58Decoder().decode(sigBytes) as Signature;
         parsedTx.signature = sig;
+
         const [tx] = await sql`
         INSERT INTO transactions (order_id, edge_id, mint, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
         VALUES (
@@ -127,14 +133,13 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
             ${parsedTx.amountInfo.uiAmount},
             ${parsedTx.amountInfo.feeAmount},
             ${parsedTx.amountInfo.uiFeeAmount},
-            ${sig},
+            ${parsedTx.signature},
             'pending'
             )
             RETURNING *; 
             `;
 
-        // console.log("inserted tx", tx);
-        setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTING", data: parsedTx }); // might already send the sig
+        console.log("inserted tx", tx);
         const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
         if (txErr) {
@@ -144,6 +149,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
 
         return setAndPushOrderStatus(userId, orderId, { edgeId, status: "FILLED", data: parsedTx });
     } catch (err) {
+        console.error(err)
         return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
     }
 }
@@ -153,8 +159,8 @@ export const ackSubscribedOrderStatus = async (userId: string, topic: string, pa
     const status = orderStatusStore.get(orderId);
 
     if (status) {
-        if (status.status !== "EXECUTION_FAILED") {
-            return subsClient.push(userId, topic, status);
+        if (status.status === "EXECUTION_FAILED") {
+            return subsClient.pushErrAndDrop(userId, topic, status);
         }
         return subsClient.push(userId, topic, status);
     }
@@ -172,7 +178,7 @@ type ParsedTransaction = {
     signature: Signature;
 }
 
-const parseTransfer = (ctm: CompiledTransactionMessage): ParsedTransaction | null => {
+const parseTransfer = async (ctm: CompiledTransactionMessage): Promise<ParsedTransaction | null> => {
     const message = decompileTransactionMessage(ctm);
     for (const ix of message.instructions) {
         const key = `${ix.programAddress}:${getDiscriminator(ix.data)}`
@@ -180,11 +186,12 @@ const parseTransfer = (ctm: CompiledTransactionMessage): ParsedTransaction | nul
 
         if (!handler) continue
 
-        const parsedTx = handler(message.instructions);
+        const parsedTx = await handler(message.instructions);
         if (!parsedTx) return null
 
-        // parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(ctm.header.numSignerAccounts)).toString());
-        // parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(ctm.header.numSignerAccounts), 9);
+        console.log(inspect(parsedTx, { depth: null }))
+        parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(ctm.header.numSignerAccounts)).toString());
+        parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(ctm.header.numSignerAccounts), 9);
 
         return parsedTx;
     }
@@ -192,7 +199,7 @@ const parseTransfer = (ctm: CompiledTransactionMessage): ParsedTransaction | nul
     return null;
 }
 
-function handleSystemTransfer(ixs: Instruction[]): ParsedTransaction | null {
+function handleSystemTransfer(ixs: Instruction[]) {
     const solTransfer = ixs.find(ix => identifySystemInstruction(ix) === SystemInstruction.TransferSol);
     if (!solTransfer) return null;
 
@@ -213,7 +220,7 @@ function handleSystemTransfer(ixs: Instruction[]): ParsedTransaction | null {
         }
     }
 }
-async function handleTokenTransferChecked(ixs: Instruction[]): ParsedTransaction | null {
+async function handleTokenTransferChecked(ixs: Instruction[]) {
     const checkedTransfer = ixs.find(ix => identifyTokenInstruction(ix) === TokenInstruction.TransferChecked)
     if (!checkedTransfer) return null;
 

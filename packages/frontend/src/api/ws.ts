@@ -1,6 +1,6 @@
-import type { Address, Base64EncodedWireTransaction, StringifiedBigInt } from "@solana/kit";
+import type { Address, Base64EncodedWireTransaction, Signature, StringifiedBigInt } from "@solana/kit";
 import { useSocketStore } from "../store/useSocketStore";
-import { useCanvasStore } from "../store/useCanvasStore";
+import { useCanvasStore, type TokenMeta } from "../store/useCanvasStore";
 
 type SocketRequestMsg = {
     op: 1 | 8 | 4 | 6;
@@ -174,20 +174,21 @@ export const sendSolanaTransaction = async (
 type ParsedTransaction = {
     from: Address;
     to: Address;
-    tokenMint: Address;
+    tokenMeta: TokenMeta,
     amountInfo: {
         amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
-    }
+    };
+    signature: Signature;
 }
 
 type SocketError = {
     code: string;
     message?: string;
 }
-type OrderStatus =
-    | { ok: true; edgeId: string, status: "FILLED", data: ParsedTransaction }
-    | { ok: true; edgeId: string, status: "EXECUTING" | "EXECUTION_FAILED" }
-    | { ok: false, edgeId: string, err: SocketError };
+export type OrderStatus =
+    | { edgeId: string, status: "EXECUTING" }
+    | { edgeId: string, status: "FILLED", data: ParsedTransaction }
+    | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
 export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
@@ -203,24 +204,27 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
         });
     }
     const handleMsg = (msg: OrderStatus) => {
-        if (!msg.ok) {
-            console.error("order status failed", msg);
-            return
-        }
         switch (msg.status) {
             case "EXECUTING": {
                 console.log("tx executing")
-                break; // still processing todo: set zustand states here
+                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.status)
+                break;
             }
             case "FILLED": {
-                const { edgeId, data } = msg;
-
+                const { data } = msg;
+                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.status);
                 useCanvasStore.getState().setEdgeCurrency(
-                    edgeId, {
-                    mint: data.tokenMint,
-                }
-
-                )
+                    edgeId,
+                    {
+                        signature: data.signature,
+                        mint: data.tokenMeta.mint,
+                        tokenMeta: data.tokenMeta,
+                        amountInfo: {
+                            amount: data.amountInfo.amount,
+                            uiAmount: data.amountInfo.uiAmount
+                        }
+                    }
+                );
                 unsubscribe();
                 break;
             }
