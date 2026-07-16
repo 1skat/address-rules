@@ -13,16 +13,27 @@ export type TokenMeta = {
     iconURI?: string;
 }
 
-export type EdgeTransactionData = {
-    chainId: "501" | "60";
-    selectedMint: string;
-    state: "draft" | "pending" | "processed";
-    tokens: Record<string, {
-        tokenMeta: TokenMeta;
-        totalAmount: StringifiedBigInt;
-        uiTotalAmount: string;
-    }>;
-}
+export type EdgeTransactionData =
+    | {
+        state: "draft" | "pending" | "processed";
+        chainId: "501";
+        selectedMint: string;
+        tokens: Record<string, {
+            tokenMeta: TokenMeta;
+            totalAmount: StringifiedBigInt;
+            uiTotalAmount: string;
+        }>;
+    }
+    | {
+        state: "draft" | "pending" | "processed";
+        chainId: "60";
+        selectedMint: string;
+        tokens: Record<string, {
+            tokenMeta: TokenMeta;
+            totalAmount: StringifiedBigInt;
+            uiTotalAmount: string;
+        }>;
+    };
 export type TransactionEdge = Edge<EdgeTransactionData>;
 
 export type CurrencyUpdateData = {
@@ -46,6 +57,7 @@ type CanvasStore = {
     // setSelectedEdge: (edge: TransactionEdge | null) => void;
     selectedEdgeId: string | null;
     setSelectedEdgeId: (edgeId: string | null) => void;
+    setEdgeSelectedMint: (edgeId: string, chainId: "501" | "60", mint: string) => void;
     // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
     setEdgeState: (edgeId: string, status: OrderState) => void;
@@ -103,6 +115,14 @@ export const useCanvasStore = create<CanvasStore>()(
                 console.log(oldEdge.id)
                 set((s) => ({
                     edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
+                }))
+            },
+            setEdgeSelectedMint: (edgeId: string, chainId: "501" | "60", mint: string) => {
+                set((s) => ({
+                    edges: s.edges.map((e) => e.id === edgeId && e.data && e.data.chainId === chainId
+                        ? { ...e, data: { ...e.data, selectedMint: mint } }
+                        : e,
+                    )
                 }))
             },
             setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => {

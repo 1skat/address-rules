@@ -28,7 +28,8 @@ const exampleUserPortfolioStore: Record<string, TokenMeta> = {
 export const SendSolanaTxCard = React.memo(() => {
     const activeTool = useToolStore(s => s.activeTool);
     const selectedEdge = useCanvasStore(s => s.edges.find(e => e.id === s.selectedEdgeId));
-    const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
+    // const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
+    const setEdgeSelectedMint = useCanvasStore(s => s.setEdgeSelectedMint);
     const nodes = useCanvasStore(s => s.nodes);
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
@@ -40,18 +41,7 @@ export const SendSolanaTxCard = React.memo(() => {
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
     const handlerCurrencyChange = (tokenMint: string) => {
-        // const token = exampleUserPortfolioStore.find(t => t.tokenMeta.mint === tokenMint) // for evm add chainId comparison
-        const tokenData = exampleUserPortfolioStore[`501:${tokenMint}`]; // fetch token data from the db
-        if (!tokenData) return;
-
-        setEdgeCurrency(selectedEdge.id, {
-            mint: tokenData.mint,
-            tokenMeta: tokenData,
-            amountInfo: {
-                amount: stringifiedBigInt(amount.toString()),
-                uiAmount: toUiAmount(amount, tokenData.decimals),
-            },
-        });
+        return setEdgeSelectedMint(selectedEdge.id, "501", tokenMint);
     }
 
     const onClickHandler = async () => {
