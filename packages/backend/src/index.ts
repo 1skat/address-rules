@@ -203,7 +203,6 @@ app.post("/wallets", authenticate, async (req, res) => {
 
             if (!newWallet) throw new Error("Insert wallet failed");
 
-            // add default Solana token to a fresh wallet
             const [token] = await sql`
             SELECT id FROM tokens WHERE chain_id = '501' AND address = '11111111111111111111111111111111'
             `;

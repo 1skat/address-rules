@@ -12,12 +12,14 @@ import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 
 const exampleUserPortfolioStore: Record<string, TokenMeta> = {
     "501:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": {
+        tokenId: "0",
         mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
         symbol: "USDC",
         name: "USDC",
         decimals: 6,
     },
     "501:11111111111111111111111111111111": {
+        tokenId: "1",
         mint: "11111111111111111111111111111111",
         symbol: "SOL",
         name: "Solana",

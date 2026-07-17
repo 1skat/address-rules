@@ -38,7 +38,7 @@ INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)
 VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641)); -- devnet address, 
 
 CREATE TYPE handle_side AS ENUM ('left', 'right');
-CREATE TYPE tx_status AS ENUM ('pending', 'processed', 'failed');
+CREATE TYPE tx_status AS ENUM ('EXECUTING', 'EXECUTION_FAILED', 'FILLED');
 
 CREATE TABLE edges (
     id UUID PRIMARY KEY,
@@ -54,13 +54,20 @@ CREATE TABLE edges (
 CREATE TABLE transactions (
     order_id UUID PRIMARY KEY,
     edge_id UUID NOT NULl REFERENCES edges(id) ON DELETE RESTRICT, -- prevent removing txs on edge delete
-    mint TEXT NOT NULL,
-    amount TEXT NOT NULL, -- save as TEXT to prevent overflow, passed as stringifiedBigInt
+    token_id UUID NOT NULL REFERENCES tokens(id),
+    amount NUMERIC(78) NOT NULL,
     ui_amount TEXT NOT NULL,
-    fee_amount TEXT NOT NULL,
+    fee_amount NUMERIC(78) NOT NULL,
     ui_fee_amount TEXT NOT NULL,
     signature TEXT NOT NULL,
-    status tx_status NOT NULL DEFAULT 'pending',
+    status tx_status NOT NULL DEFAULT 'EXECUTING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE edge_token_totals (
+    edge_id UUID REFERENCES edges(id) ON DELETE CASCADE,
+    token_id UUID REFERENCES tokens(id),
+    total_amount NUMERIC NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (edge_id, token_id)
+);

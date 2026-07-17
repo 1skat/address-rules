@@ -169,12 +169,5 @@ export const getBlockhash = async (): Promise<Readonly<{
     }));
 }
 
-// SHOULD BE DONE OVER WS
-// export const sendSolanaTx = async (signedTx: Base64EncodedWireTransaction): Promise<Signature> => {
-//     return await apiFetch("/transactions/send", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ signedTx }),
-//     }).then(resp => resp.json());
-// }
+
 

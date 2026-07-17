@@ -171,14 +171,13 @@ export const sendSolanaTransaction = async (
     sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx, edgeId });
 
 
-type ParsedTransaction = {
-    from: Address;
-    to: Address;
-    tokenMeta: TokenMeta,
-    amountInfo: {
-        amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
-    };
-    signature: Signature;
+type EdgeTokenData = {
+    mint: string;
+    tokenMeta: TokenMeta;
+    totalAmountInfo: {
+        amount: StringifiedBigInt;
+        uiAmount: string;
+    }
 }
 
 type SocketError = {
@@ -187,7 +186,7 @@ type SocketError = {
 }
 export type OrderStatus =
     | { edgeId: string, status: "EXECUTING" }
-    | { edgeId: string, status: "FILLED", data: ParsedTransaction }
+    | { edgeId: string, status: "FILLED", data: EdgeTokenData }
     | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
@@ -216,12 +215,11 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
                 useCanvasStore.getState().setEdgeCurrency(
                     edgeId,
                     {
-                        signature: data.signature,
                         mint: data.tokenMeta.mint,
                         tokenMeta: data.tokenMeta,
                         amountInfo: {
-                            amount: data.amountInfo.amount,
-                            uiAmount: data.amountInfo.uiAmount
+                            amount: data.totalAmountInfo.amount,
+                            uiAmount: data.totalAmountInfo.uiAmount,
                         }
                     }
                 );
@@ -247,23 +245,16 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
     });
 }
 
-// const subscribeUserWalletUpdates = async (): Promise<void> => {
-//     const subId = crypto.randomUUID();
-//     const route = "/orders/subscribe-status";
-
-//     const unsubscribe
-// }
-
 const subscribeUserWalletUpdates = async (): Promise<void> => {
     const subId = crypto.randomUUID();
     const route = "/wallets/subscribe-updates";
 
     const handler = (msg: any) => {
         switch (msg.type) {
-            case "init":
+            case "SNAPSHOT":
                 console.log("INIT:", msg);
                 break;
-            case "wallet-update":
+            case "BALANCE_UPDATE":
                 console.log("UPDATE:", msg);
                 break;
         }

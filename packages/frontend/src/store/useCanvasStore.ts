@@ -6,6 +6,7 @@ import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
 type OrderState = "EXECUTING" | "EXECUTION_FAILED" | "FILLED";
 
 export type TokenMeta = {
+    tokenId: string;
     mint: string;
     symbol: string;
     name: string;
@@ -37,7 +38,7 @@ export type EdgeTransactionData =
 export type TransactionEdge = Edge<EdgeTransactionData>;
 
 export type CurrencyUpdateData = {
-    signature: string;
+    // signature: string;
     mint: string;
     tokenMeta: TokenMeta;
     amountInfo: {

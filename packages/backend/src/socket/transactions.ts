@@ -20,6 +20,7 @@ import { inspect } from "util";
 const TERMINAL_TX_TTL_MS = 2 * 60 * 1000;
 
 export type TokenMeta = {
+    tokenId: string;
     mint: string;
     symbol: string;
     name: string;
@@ -27,9 +28,18 @@ export type TokenMeta = {
     iconURI?: string;
 }
 
+type EdgeTokenData = {
+    mint: string;
+    tokenMeta: TokenMeta;
+    totalAmountInfo: {
+        amount: StringifiedBigInt;
+        uiAmount: string;
+    }
+}
+
 export type OrderStatus =
     | { edgeId: string, status: "EXECUTING" }
-    | { edgeId: string, status: "FILLED", data: ParsedTransaction }
+    | { edgeId: string, status: "FILLED", data: EdgeTokenData }
     | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
@@ -109,7 +119,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         assertIsFullySignedTransaction(fullTx);
 
         const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
-        let parsedTx = await parseTransfer(compiled);
+        const parsedTx = await parseTransfer(compiled);
         if (!parsedTx) {
             console.error("failed parsing tx");
             return
@@ -124,32 +134,60 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         parsedTx.signature = sig;
 
         const [tx] = await sql`
-        INSERT INTO transactions (order_id, edge_id, mint, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
+        INSERT INTO transactions (order_id, edge_id, token_id, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
         VALUES (
             ${orderId},
             ${edgeId},
-            ${parsedTx.tokenMeta.mint},
+            ${parsedTx.tokenMeta.tokenId},
             ${parsedTx.amountInfo.amount},
             ${parsedTx.amountInfo.uiAmount},
             ${parsedTx.amountInfo.feeAmount},
             ${parsedTx.amountInfo.uiFeeAmount},
             ${parsedTx.signature},
-            'pending'
+            'EXECUTING'
             )
             RETURNING *; 
             `;
 
-        console.log("inserted tx", tx);
         const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
         if (txErr) {
             const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
+            await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
             return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: errCode } });
         }
 
-        return setAndPushOrderStatus(userId, orderId, { edgeId, status: "FILLED", data: parsedTx });
+        const totalAmount: string = await sql.begin(async sql => {
+            await sql`UPDATE transactions SET status = 'FILLED' WHERE order_id = ${orderId}`;
+            const [total] = await sql`
+            INSERT INTO edge_token_totals (edge_id, token_id, total_amount)
+            SELECT ${edgeId}, ${parsedTx.tokenMeta.tokenId}, COALESCE(SUM(amount), 0)
+            FROM transactions
+            WHERE edge_id = ${edgeId} AND token_id = ${parsedTx.tokenMeta.tokenId} AND status = 'FILLED'
+            ON CONFLICT (edge_id, token_id) DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()
+            RETURNING total_amount
+            `;
+            if (!total) throw new Error();
+
+            return total.total_amount;
+        });
+        if (!totalAmount) {
+            return;
+        }
+
+        return setAndPushOrderStatus(userId, orderId, {
+            edgeId, status: "FILLED", data: {
+                mint: parsedTx.tokenMeta.mint,
+                tokenMeta: parsedTx.tokenMeta,
+                totalAmountInfo: {
+                    amount: stringifiedBigInt(totalAmount),
+                    uiAmount: toUiAmount(BigInt(totalAmount), parsedTx.tokenMeta.decimals),
+                }
+            }
+        });
     } catch (err) {
         console.error(err)
+        await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
         return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
     }
 }
@@ -199,20 +237,29 @@ const parseTransfer = async (ctm: CompiledTransactionMessage): Promise<ParsedTra
     return null;
 }
 
-function handleSystemTransfer(ixs: Instruction[]) {
+
+async function handleSystemTransfer(ixs: Instruction[]) {
     const solTransfer = ixs.find(ix => identifySystemInstruction(ix) === SystemInstruction.TransferSol);
     if (!solTransfer) return null;
 
     const parsed = parseTransferSolInstruction(solTransfer);
+    // do redis or ttl cache look up
+    const [token] = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501' AND address = '11111111111111111111111111111111'`;
+    if (!token) {
+        // fetch the metadata from chain
+        console.error("token metadata not found")
+        return null;
+    }
 
     return {
         from: parsed.accounts.source.address,
         to: parsed.accounts.destination.address,
         tokenMeta: {
-            mint: "11111111111111111111111111111111",
-            symbol: "SOL",
-            name: "Solana",
-            decimals: 9
+            tokenId: token.id,
+            mint: token.address,
+            symbol: token.symbol,
+            name: token.name,
+            decimals: token.decimals,
         },
         amountInfo: {
             amount: stringifiedBigInt(parsed.data.amount.toString()),
@@ -230,7 +277,7 @@ async function handleTokenTransferChecked(ixs: Instruction[]) {
     const { accounts: transferCheckedAccs, data: amountInfo } = parseTransferCheckedInstruction(checkedTransfer);
     const { accounts: ataAccs, data: ataInfo } = parseCreateAssociatedTokenIdempotentInstruction(ataIx);
 
-    const [token] = await sql`SELECT chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501' AND address = ${transferCheckedAccs.mint.address}`;
+    const [token] = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501' AND address = ${transferCheckedAccs.mint.address}`;
     if (!token) {
         // fetch the metadata from chain
         console.error("token metadata not found")
@@ -242,6 +289,7 @@ async function handleTokenTransferChecked(ixs: Instruction[]) {
             from: transferCheckedAccs.authority.address,
             to: ataAccs.owner.address,
             tokenMeta: {
+                tokenId: token.id,
                 mint: token.address,
                 symbol: token.symbol,
                 name: token.name,
