@@ -1,8 +1,8 @@
 import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
-import React, { useState } from "react";
-import { useCanvasStore, type TokenMeta } from "../../store/useCanvasStore";
-import { toSmallestUnit, toUiAmount } from "../../lib/utils";
+import React, { useEffect, useRef, useState } from "react";
+import { useCanvasStore, type TokenMeta, type TransactionEdge } from "../../store/useCanvasStore";
+import { isNonEmptyTokens, toSmallestUnit, toUiAmount } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address, stringifiedBigInt } from "@solana/kit";
@@ -11,15 +11,17 @@ import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 
 
 const exampleUserPortfolioStore: Record<string, TokenMeta> = {
-    "501:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": {
-        tokenId: "0",
+    "0b94bf38-b88c-4867-8957-7143e0d86235": {
+        tokenId: "0b94bf38-b88c-4867-8957-7143e0d86235",
+        chainId: "501",
         mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
         symbol: "USDC",
         name: "USDC",
         decimals: 6,
     },
-    "501:11111111111111111111111111111111": {
-        tokenId: "1",
+    "14ce98ee-5006-4bc7-a360-1ff1b826892f": {
+        tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
+        chainId: "501",
         mint: "11111111111111111111111111111111",
         symbol: "SOL",
         name: "Solana",
@@ -29,21 +31,55 @@ const exampleUserPortfolioStore: Record<string, TokenMeta> = {
 
 export const SendSolanaTxCard = React.memo(() => {
     const activeTool = useToolStore(s => s.activeTool);
-    const selectedEdge = useCanvasStore(s => s.edges.find(e => e.id === s.selectedEdgeId));
-    // const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
+    const selectedEdgeId = useCanvasStore(s => s.selectedEdgeId);
+    const selectedEdge = useCanvasStore(s => s.edges.find(e => e.id === selectedEdgeId));
     const setEdgeSelectedMint = useCanvasStore(s => s.setEdgeSelectedMint);
+    const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
+    const addEdgeToken = useCanvasStore(s => s.addEdgeToken)
+    const removeEdgeToken = useCanvasStore(s => s.removeEdgeToken);
     const nodes = useCanvasStore(s => s.nodes);
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
     const [err, setErr] = useState<Error | null>(null);
+    const edgeRef = useRef<{ edgeId: string, tokenIdOnOpen: string } | null>(null);
+
+    useEffect(() => {
+        if (!selectedEdge /*diselected*/ && edgeRef.current) {
+            const { edgeId, tokenIdOnOpen } = edgeRef.current;
+            const edge = useCanvasStore.getState().edges.find(e => e.id === edgeId);
+            if (!edge || !edge.data) return;
+            const tokenIdToRemove = edge.data.selectedTokenId;
+
+            if (tokenIdToRemove !== tokenIdOnOpen && tokenIdToRemove !== "14ce98ee-5006-4bc7-a360-1ff1b826892f") {
+                const tokenEntry = edge.data.tokens[tokenIdToRemove];
+                if (tokenEntry.state === "draft") {
+                    removeEdgeToken(edgeId, tokenIdToRemove)
+                    setEdgeSelectedMint(edgeId, tokenIdOnOpen);
+                }
+            }
+            edgeRef.current = null;
+        }
+        if (selectedEdge && edgeRef.current === null) {
+            edgeRef.current = { edgeId: selectedEdge.id, tokenIdOnOpen: selectedEdge.data?.selectedTokenId ?? "14ce98ee-5006-4bc7-a360-1ff1b826892f" } // put to localstorage or index db (cached) as SOL_ADDRESS_UUID
+        }
+    }, [removeEdgeToken, setEdgeSelectedMint, selectedEdge])
 
     if (activeTool !== "cursor" || !selectedEdge) return null;
 
     const fromNode = nodes.find(n => n.id === selectedEdge.source);
     const toNode = nodes.find(n => n.id === selectedEdge.target);
 
-    const handlerCurrencyChange = (tokenMint: string) => {
-        return setEdgeSelectedMint(selectedEdge.id, "501", tokenMint);
+
+    const handlerCurrencyChange = (tokenId: string) => {
+        if (!tokenId) {
+            console.error("token id not found")
+            return
+        }
+        const exists = selectedEdge.data?.tokens[tokenId];
+        if (!exists) {
+            addEdgeToken(selectedEdge.id, tokenId, exampleUserPortfolioStore[tokenId]);
+        }
+        setEdgeSelectedMint(selectedEdge.id, tokenId);
     }
 
     const onClickHandler = async () => {
@@ -58,16 +94,16 @@ export const SendSolanaTxCard = React.memo(() => {
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address);
 
-            const tokenData = exampleUserPortfolioStore[`501:${selectedEdge.data.selectedMint}`];
+            const tokenData = exampleUserPortfolioStore[selectedEdge.data.selectedTokenId];
             if (!tokenData) {
-                console.error(`token data for ${selectedEdge.data.selectedMint} not found`);
+                console.error(`token data not found`);
                 return
             }
             const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, tokenData);
             const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
             const { orderId } = await sendSolanaTransaction(tx, selectedEdge.id);
             console.log("requested", orderId);
-            subscribeOrderStatus(orderId, selectedEdge.id);
+            subscribeOrderStatus(orderId, selectedEdge.id, selectedEdge.data.selectedTokenId);
         } catch (err) {
             setErr(err)
         } finally {
@@ -85,15 +121,23 @@ export const SendSolanaTxCard = React.memo(() => {
                             console.error("edge data not found");
                             return;
                         }
-                        const decimals = exampleUserPortfolioStore[`501:${selectedEdge.data.selectedMint}`]?.decimals;
+                        const decimals = exampleUserPortfolioStore[selectedEdge.data.selectedTokenId].decimals;
                         if (!decimals) return;
 
                         const val = toSmallestUnit(e.target.value, decimals);
-                        if (val) setAmount(val);
+                        if (val) {
+                            setAmount(val);
+
+                            // dont allow currency change for non draft states
+                            setEdgeCurrency(selectedEdge.id, selectedEdge.data.selectedTokenId, {
+                                amount: stringifiedBigInt(val.toString()),
+                                uiAmount: toUiAmount(val, decimals)
+                            });
+                        }
                     }} />
-                    <select value={selectedEdge.data?.selectedMint} onChange={(e) => handlerCurrencyChange(e.target.value)}>
-                        {Object.values(exampleUserPortfolioStore).map(td => (
-                            <option key={td.mint} value={td.mint}>{td.symbol}</option>)
+                    <select value={selectedEdge.data?.selectedTokenId} onChange={(e) => handlerCurrencyChange(e.target.value)}>
+                        {Object.entries(exampleUserPortfolioStore).map(([ti, td]) => (
+                            <option key={ti} value={ti}>{td.symbol}</option>)
                         )}
                     </select>
                 </label>

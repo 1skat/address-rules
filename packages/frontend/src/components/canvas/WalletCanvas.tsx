@@ -43,13 +43,12 @@ const WalletCanvasInner = () => {
     // Nodes
     const nodes = useCanvasStore(s => s.nodes);
     const setNodes = useCanvasStore(s => s.setNodes);
-    const addNode = useCanvasStore(s => s.addNode);
 
     // Edges
     const edges = useCanvasStore(s => s.edges);
     // const addConnection = useCanvasStore(s => s.addConnection);
     // const setEdges = useCanvasStore(s => s.setEdges);
-    const { onNodeMouseEnter } = useNodeInteraction();
+    const { onNodeMouseEnter, addWalletNode } = useNodeInteraction();
     const { onEdgeMouseEnter, onReconnectStart, onReconnect, onReconnectEnd, onEdgeClick, addConnectionEdge } = useEdgeInteraction();
     const setSelectedEdgeId = useCanvasStore(s => s.setSelectedEdgeId);
 
@@ -67,18 +66,19 @@ const WalletCanvasInner = () => {
 
             // move to hooks
             try {
-                const newWallet = await createWallet("501", null, mousePosition);
-                addNode({
-                    id: newWallet.id,
-                    type: "wallet",
-                    position: mousePosition,
-                    data: {
-                        address: newWallet.address,
-                        alias: newWallet.alias,
-                        derivationIndex: newWallet.derivation_index,
-                        chainId: newWallet.chain_id,
-                    },
-                });
+                await addWalletNode("501", mousePosition, null);
+                // const newWallet = await createWallet("501", null, mousePosition);
+                // addNode({
+                //     id: newWallet.id,
+                //     type: "wallet",
+                //     position: mousePosition,
+                //     data: {
+                //         address: newWallet.address,
+                //         alias: newWallet.alias,
+                //         derivationIndex: newWallet.derivation_index,
+                //         chainId: newWallet.chain_id,
+                //     },
+                // });
             } catch (err) {
                 console.error(`ERROR adding wallet: ${err}`);
             }
@@ -86,7 +86,7 @@ const WalletCanvasInner = () => {
         }
 
 
-    }, [activeTool, addNode, screenToFlowPosition, setSelectedEdgeId]);
+    }, [activeTool, screenToFlowPosition, setSelectedEdgeId, addWalletNode]);
 
     return (
         <div className="relative w-screen h-screen" data-tool={activeTool}>

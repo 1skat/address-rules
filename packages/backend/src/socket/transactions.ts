@@ -21,6 +21,7 @@ const TERMINAL_TX_TTL_MS = 2 * 60 * 1000;
 
 export type TokenMeta = {
     tokenId: string;
+    chainId: string;
     mint: string;
     symbol: string;
     name: string;
@@ -38,9 +39,9 @@ type EdgeTokenData = {
 }
 
 export type OrderStatus =
-    | { edgeId: string, status: "EXECUTING" }
-    | { edgeId: string, status: "FILLED", data: EdgeTokenData }
-    | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
+    | { edgeId: string, tokenId: string, status: "EXECUTING" }
+    | { edgeId: string, tokenId: string, status: "FILLED", data: EdgeTokenData }
+    | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
 const orderStatusStore = {
@@ -77,7 +78,7 @@ const setAndPushOrderStatus = (userId: string, orderId: string, os: OrderStatus)
 }
 
 export const sendTransaction = (userId: string, id: string, data: any) => {
-    const { signedTx, edgeId } = data;
+    const { signedTx, edgeId, tokenId } = data;
     const op = 9;
 
     if (!signedTx) {
@@ -91,7 +92,7 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
 
     const orderId = crypto.randomUUID();
 
-    setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTING" });
+    setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTING" }); // only send it here to avoid the reace condition
     processTx(userId, orderId, data);
 
     return wsClient.pub(userId, {
@@ -104,7 +105,7 @@ export const sendTransaction = (userId: string, id: string, data: any) => {
 
 export const processTx = async (userId: string, orderId: string, data: any) => {
     // zod
-    const { signedTx, edgeId } = data;
+    const { signedTx, edgeId, tokenId } = data;
 
     try {
         const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
@@ -122,6 +123,11 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         const parsedTx = await parseTransfer(compiled);
         if (!parsedTx) {
             console.error("failed parsing tx");
+            return
+        }
+
+        if (parsedTx.tokenMeta.tokenId !== tokenId) {
+            console.error("token ids do not match")
             return
         }
 
@@ -154,7 +160,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         if (txErr) {
             const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
             await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
-            return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: errCode } });
+            return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: errCode } });
         }
 
         const totalAmount: string = await sql.begin(async sql => {
@@ -176,9 +182,9 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         }
 
         return setAndPushOrderStatus(userId, orderId, {
-            edgeId, status: "FILLED", data: {
-                mint: parsedTx.tokenMeta.mint,
-                tokenMeta: parsedTx.tokenMeta,
+            edgeId, tokenId, status: "FILLED", data: {
+                mint: parsedTx.tokenMeta.mint, // i dont need that
+                tokenMeta: parsedTx.tokenMeta, // dont need that, cuz the meta alreadt exists or the call is made
                 totalAmountInfo: {
                     amount: stringifiedBigInt(totalAmount),
                     uiAmount: toUiAmount(BigInt(totalAmount), parsedTx.tokenMeta.decimals),
@@ -188,7 +194,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
     } catch (err) {
         console.error(err)
         await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
-        return setAndPushOrderStatus(userId, orderId, { edgeId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
+        return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
     }
 }
 
@@ -256,6 +262,7 @@ async function handleSystemTransfer(ixs: Instruction[]) {
         to: parsed.accounts.destination.address,
         tokenMeta: {
             tokenId: token.id,
+            chainId: "501",
             mint: token.address,
             symbol: token.symbol,
             name: token.name,
@@ -290,6 +297,7 @@ async function handleTokenTransferChecked(ixs: Instruction[]) {
             to: ataAccs.owner.address,
             tokenMeta: {
                 tokenId: token.id,
+                chainId: "501",
                 mint: token.address,
                 symbol: token.symbol,
                 name: token.name,

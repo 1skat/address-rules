@@ -3,15 +3,29 @@ import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
 
-type OrderState = "EXECUTING" | "EXECUTION_FAILED" | "FILLED";
+type EdgeTokenState = "draft" | "pending" | "processed";
 
 export type TokenMeta = {
     tokenId: string;
+    chainId: string;
     mint: string;
     symbol: string;
     name: string;
     decimals: number;
     iconURI?: string;
+}
+
+export type TokenEntryData = {
+    state: "draft" | "pending" | "processed";
+    tokenMeta: TokenMeta;
+    totalAmount: StringifiedBigInt;
+    uiTotalAmount: string;
+}
+
+export type EdgeTransactionDataV3 = {
+    chainId: "501";
+    selectedTokenId: string;
+    tokens: Record<string, TokenEntryData>;
 }
 
 export type EdgeTransactionData =
@@ -35,16 +49,18 @@ export type EdgeTransactionData =
             uiTotalAmount: string;
         }>;
     };
-export type TransactionEdge = Edge<EdgeTransactionData>;
+export type TransactionEdge = Edge<EdgeTransactionDataV3>;
 
-export type CurrencyUpdateData = {
-    // signature: string;
-    mint: string;
-    tokenMeta: TokenMeta;
-    amountInfo: {
-        amount: StringifiedBigInt;
-        uiAmount: string;
-    }
+export type BalanceUpdateData = {
+    state: "pending" | "processed";
+    amount: StringifiedBigInt;
+    uiAmount: string;
+}
+
+export type DraftAmountData = {
+    state: "draft";
+    amount: StringifiedBigInt;
+    uiAmount: string;
 }
 
 type CanvasStore = {
@@ -58,13 +74,16 @@ type CanvasStore = {
     // setSelectedEdge: (edge: TransactionEdge | null) => void;
     selectedEdgeId: string | null;
     setSelectedEdgeId: (edgeId: string | null) => void;
-    setEdgeSelectedMint: (edgeId: string, chainId: "501" | "60", mint: string) => void;
+    setEdgeSelectedMint: (edgeId: string, tokenId: string) => void;
+    addEdgeToken: (edgeId: string, chainId: string, tokenMeta: TokenMeta) => void;
+    removeEdgeToken: (edgeId: string, tokenId: string) => void;
     // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
-    setEdgeState: (edgeId: string, status: OrderState) => void;
-    addConnection: (connection: Connection, edgeData: EdgeTransactionData) => string;
+    setEdgeState: (edgeId: string, tokenId: string, status: EdgeTokenState) => void;
+    addConnection: (connection: Connection, edgeData: EdgeTransactionDataV3) => string;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
-    setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => void;
+    updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => void;
+    setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -92,7 +111,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 console.log("removing edge:", id)
                 set((s) => ({ edges: s.edges.filter(e => e.id !== id) }))
             },
-            addConnection: (connection, data: EdgeTransactionData) => {
+            addConnection: (connection, data: EdgeTransactionDataV3) => {
                 const id = crypto.randomUUID();
                 set((s) => ({
                     edges: addEdge<TransactionEdge>({
@@ -118,45 +137,95 @@ export const useCanvasStore = create<CanvasStore>()(
                     edges: rfReconnectEdge(oldEdge, newConnection, s.edges)
                 }))
             },
-            setEdgeSelectedMint: (edgeId: string, chainId: "501" | "60", mint: string) => {
+            setEdgeSelectedMint: (edgeId: string, tokenId: string) => {
                 set((s) => ({
-                    edges: s.edges.map((e) => e.id === edgeId && e.data && e.data.chainId === chainId
-                        ? { ...e, data: { ...e.data, selectedMint: mint } }
+                    edges: s.edges.map((e) => e.id === edgeId && e.data
+                        ? { ...e, data: { ...e.data, selectedTokenId: tokenId } }
                         : e,
                     )
                 }))
             },
-            setEdgeCurrency: (edgeId: string, data: CurrencyUpdateData) => {
-                const { mint, tokenMeta, amountInfo } = data;
+            updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => {
                 set((s) => ({
-                    edges: s.edges.map((e) => e.id === edgeId && e.data
-                        ? {
+                    edges: s.edges.map((e) => {
+                        if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
+
+                        return {
                             ...e,
                             data: {
                                 ...e.data,
-                                selectedMint: mint,
                                 tokens: {
-                                    ...e.data?.tokens,
-                                    [mint]: {
-                                        tokenMeta, totalAmount: stringifiedBigInt(amountInfo.amount), uiTotalAmount: amountInfo.uiAmount,
+                                    ...e.data.tokens,
+                                    [tokenId]: {
+                                        ...e.data.tokens[tokenId], totalAmount: data.amount, uiTotalAmount: data.uiAmount,
                                     }
                                 }
                             }
-                        } : e)
+                        }
+                    })
                 }))
             },
-            setEdgeState: (edgeId: string, txState: OrderState) => {
-                set((s) => {
-                    return {
-                        edges: s.edges.map((e) => e.id === edgeId && e.data ? {
+            setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => {
+                set((s) => ({
+                    edges: s.edges.map((e) => {
+                        if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
+
+                        return {
+                            ...e,
+                        }
+
+                    })
+                }))
+            },
+            setEdgeState: (edgeId: string, tokenId: string, txState: "draft" | "pending" | "processed") => {
+                set((s) => ({
+                    edges: s.edges.map((e) => e.id === edgeId && e.data ? {
+                        ...e, data: {
+                            ...e.data,
+                            tokens: {
+                                ...e.data.tokens,
+                                [tokenId]: {
+                                    ...e.data.tokens[tokenId],
+                                    status: txState
+                                }
+                            }
+                        }
+                    } : e)
+                }));
+            },
+            addEdgeToken: (edgeId: string, tokenId: string, tokenMeta: TokenMeta) => {
+                set((s) => ({
+                    edges: s.edges.map((e) => {
+                        if (e.id !== edgeId || !e.data || e.data.tokens[tokenId] /*skip if exists*/) return e;
+
+                        console.log("meta", tokenMeta);
+                        return {
                             ...e, data: {
                                 ...e.data,
-                                status: txState === "EXECUTING" ? "pending" : txState === "FILLED" ? "processed" : "draft",
+                                tokens: {
+                                    ...e.data.tokens, [tokenId]: {
+                                        tokenMeta, state: "draft", totalAmount: stringifiedBigInt("0"), uiTotalAmount: "0"
+                                    }
+                                }
                             }
-                        } : e)
-                    }
-                })
+
+                        }
+                    })
+                }));
             },
+            removeEdgeToken: (edgeId: string, tokenId: string) => {
+                set((s) => ({
+                    edges: s.edges.map((e) => {
+                        if (e.id !== edgeId || !e.data) return e;
+
+                        const { [tokenId]: _/*excluded*/, ...rest } = e.data.tokens;
+                        console.log("REST", rest)
+                        return {
+                            ...e, data: { ...e.data, ...rest }
+                        }
+                    })
+                }))
+            }
         }),
         {
             name: "canvas-store",

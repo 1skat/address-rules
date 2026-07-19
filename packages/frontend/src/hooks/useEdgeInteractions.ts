@@ -1,5 +1,5 @@
 import React, { useCallback, useRef } from "react";
-import { useCanvasStore, type EdgeTransactionData, type TransactionEdge } from "../store/useCanvasStore";
+import { useCanvasStore, type EdgeTransactionDataV3, type TransactionEdge } from "../store/useCanvasStore";
 import { useToolStore } from "../store/useToolStore";
 import type { Connection } from "@xyflow/react";
 import { createEdge } from "../api/client";
@@ -50,13 +50,32 @@ export const useEdgeInteraction = () => {
     }, [removeEdge, setSelectedEdgeId])
 
     const addConnectionEdge = async (connection: Connection) => {
-        const txEdge: EdgeTransactionData = {
+        // const txEdge: EdgeTransactionData = {
+        //     chainId: "501",
+        //     selectedMint: "11111111111111111111111111111111",
+        //     state: "draft", // state: "draft", "pending", "processed"
+        //     tokens: {
+        //         ["11111111111111111111111111111111"]: {
+        //             tokenMeta: {
+        //                 mint: "11111111111111111111111111111111",
+        //                 symbol: "SOL",
+        //                 name: "Solana",
+        //                 decimals: 9,
+        //             },
+        //             totalAmount: stringifiedBigInt("0"),
+        //             uiTotalAmount: "0",
+        //         }
+        //     },
+        // }
+        const txEdge: EdgeTransactionDataV3 = {
             chainId: "501",
-            selectedMint: "11111111111111111111111111111111",
-            state: "draft", // state: "draft", "pending", "processed"
+            selectedTokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f", // cache in localstorage or index db
             tokens: {
-                ["11111111111111111111111111111111"]: {
+                ["14ce98ee-5006-4bc7-a360-1ff1b826892f"]: {
+                    state: "draft",
                     tokenMeta: {
+                        tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
+                        chainId: "501",
                         mint: "11111111111111111111111111111111",
                         symbol: "SOL",
                         name: "Solana",
@@ -65,7 +84,7 @@ export const useEdgeInteraction = () => {
                     totalAmount: stringifiedBigInt("0"),
                     uiTotalAmount: "0",
                 }
-            },
+            }
         }
 
         const id = addConnection(connection, txEdge); // from zustand

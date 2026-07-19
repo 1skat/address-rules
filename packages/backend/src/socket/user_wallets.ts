@@ -92,7 +92,7 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
     if (tokenMint === "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") {
         const [token] = await sql`
         WITH inserted AS (
-            INSERT INTO tokens (chain_id, address, symbol, name, decimals, deployed_at)  
+            INSERT INTO tokens (id, chain_id, address, symbol, name, decimals, deployed_at)  
             VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641))
             ON CONFLICT (chain_id,address) DO NOTHING
             RETURNING *
@@ -105,9 +105,9 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
         `
         if (!token) return null;
 
-        console.log(token)
         return {
-            id: token.id,
+            tokenId: token.id,
+            chainId: token.chain_id,
             tokenAddress: token.address,
             symbol: token.symbol,
             name: token.name,
@@ -115,12 +115,12 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
         };
     }
     if (tokenMint === "11111111111111111111111111111111") {
-        const [token] = await sql`SELECT id, address, symbol, name FROM tokens WHERE address = '11111111111111111111111111111111' `;
+        const [token] = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE address = '11111111111111111111111111111111'`;
         if (!token) return null;
 
-        console.log(token)
         return {
-            id: token.id,
+            tokenId: token.id,
+            chainId: token.chain_id,
             tokenAddress: token.address,
             symbol: token.symbol,
             name: token.name,
@@ -132,13 +132,7 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
 
 const getWalletTokenUpdates = async (
     changes: WalletTokenBalanceChange[],
-    userWalletTokensMeta: Map<string, {
-        tokenId: string,
-        tokenAddress: string,
-        symbol: string,
-        name: string,
-        decimals: number,
-    }>,
+    userWalletTokensMeta: Map<string, TokenMeta>,
     handleNewWallet: (newAccData: any) => Promise<void>,
 ): Promise<WalletTokenUpdate[]> => {
     if (!changes) throw new Error("NO_CHANGES");
@@ -161,6 +155,7 @@ const getWalletTokenUpdates = async (
             userTokenUpdates.push({
                 tokenMeta: {
                     tokenId: token.tokenId,
+                    chainId: token.chainId,
                     mint: "11111111111111111111111111111111",
                     symbol: "SOL",
                     name: "Solana",
@@ -182,7 +177,8 @@ const getWalletTokenUpdates = async (
             userTokenUpdates.push({
                 tokenMeta: {
                     tokenId: token.tokenId,
-                    mint: token.tokenAddress,
+                    chainId: token.chainId,
+                    mint: token.mint,
                     symbol: token.symbol,
                     name: token.name,
                     decimals: token.decimals,
@@ -252,10 +248,12 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
     // `
 
     // pull user's owned tokens 
+    // TODO (A): probably dont need to actually do it because it need to pull from hot cache then db
     const allUserWalletTokens = await sql`
         SELECT w.id as wallet_id, w.address as wallet_address,
         COALESCE(json_agg(
             json_build_object(
+                'chain_id', t.chain_id,
                 'token_address', t.address,
                 'symbol', t.symbol,
                 'name', t.name,
@@ -273,13 +271,15 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
 
     const allUserTokens = allUserWalletTokens.reduce((tokenMap, wt) => {
         for (const token of wt.token_list) {
-            tokenMap.set(token.token_address, {
+            const meta: TokenMeta = {
                 tokenId: token.id,
-                tokenAddress: token.token_address,
+                chainId: token.chain_id,
+                mint: token.token_address,
                 symbol: token.symbol,
                 name: token.name,
                 decimals: token.decimals,
-            });
+            }
+            tokenMap.set(token.token_address, meta);
         }
         return tokenMap;
     }, new Map());
@@ -291,7 +291,7 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
 
     const msg: UserWalletInit = {
         type: "SNAPSHOT",
-        snapshot: allUserWalletTokens, // {chainId, oken_address, symbol, name, decimals}[]
+        snapshot: allUserWalletTokens, // send as record, fix fields
     }
     subsClient.push(userId, topic, msg);
 

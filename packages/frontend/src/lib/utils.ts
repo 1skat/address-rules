@@ -1,3 +1,5 @@
+import type { TokenEntryData } from "../store/useCanvasStore";
+
 export const generateIndecies = () => {
     const out: Array<number> = [];
     while (out.length !== 3) {
@@ -28,5 +30,9 @@ export const toSmallestUnit = (amount: string, decimals: number) => {
 
 export const toUiAmount = (amount: bigint, decimals: number): string => {
     return (Number(amount) / 10 ** decimals).toString();
+}
+
+export const isNonEmptyTokens = (tokens: Record<string, TokenEntryData>) => {
+    return Object.keys(tokens).length > 0;
 }
 

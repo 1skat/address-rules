@@ -1,4 +1,4 @@
-import type { Address, Base64EncodedWireTransaction, Signature, StringifiedBigInt } from "@solana/kit";
+import type { Base64EncodedWireTransaction, StringifiedBigInt } from "@solana/kit";
 import { useSocketStore } from "../store/useSocketStore";
 import { useCanvasStore, type TokenMeta } from "../store/useCanvasStore";
 
@@ -185,12 +185,12 @@ type SocketError = {
     message?: string;
 }
 export type OrderStatus =
-    | { edgeId: string, status: "EXECUTING" }
-    | { edgeId: string, status: "FILLED", data: EdgeTokenData }
-    | { edgeId: string, status: "EXECUTION_FAILED", err: SocketError };
+    | { edgeId: string, tokenId: string, status: "EXECUTING" }
+    | { edgeId: string, tokenId: string, status: "FILLED", data: EdgeTokenData }
+    | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
 
 
-export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
+export const subscribeOrderStatus = async (orderId: string, edgeId: string, tokenId: string) => {
     const subId = crypto.randomUUID();
     const route = "/orders/subscribe-status";
 
@@ -206,21 +206,18 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
         switch (msg.status) {
             case "EXECUTING": {
                 console.log("tx executing")
-                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.status)
+                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.tokenId, "pending")
                 break;
             }
             case "FILLED": {
                 const { data } = msg;
-                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.status);
-                useCanvasStore.getState().setEdgeCurrency(
+                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.tokenId, "processed");
+                useCanvasStore.getState().setEdgeCurrency( // only updates the balanaces, the metadata has to exist
                     edgeId,
+                    msg.tokenId,
                     {
-                        mint: data.tokenMeta.mint,
-                        tokenMeta: data.tokenMeta,
-                        amountInfo: {
-                            amount: data.totalAmountInfo.amount,
-                            uiAmount: data.totalAmountInfo.uiAmount,
-                        }
+                        amount: data.totalAmountInfo.amount,
+                        uiAmount: data.totalAmountInfo.uiAmount,
                     }
                 );
                 unsubscribe();
@@ -241,7 +238,7 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string) => {
         op: 4,
         id: subId,
         route,
-        payload: { orderId, edgeId },
+        payload: { orderId, edgeId, tokenId },
     });
 }
 
@@ -255,6 +252,8 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
                 console.log("INIT:", msg);
                 break;
             case "BALANCE_UPDATE":
+                // update the wallet balance (walletId)
+
                 console.log("UPDATE:", msg);
                 break;
         }
