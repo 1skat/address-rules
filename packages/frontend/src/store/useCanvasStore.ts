@@ -3,8 +3,6 @@ import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
 
-type EdgeTokenState = "draft" | "pending" | "processed";
-
 export type TokenMeta = {
     tokenId: string;
     chainId: string;
@@ -49,10 +47,10 @@ export type EdgeTransactionData =
             uiTotalAmount: string;
         }>;
     };
-export type TransactionEdge = Edge<EdgeTransactionDataV3>;
+export type TransactionEdge = Edge<EdgeTransactionDataV3> & { data: EdgeTransactionDataV3 };
 
 export type BalanceUpdateData = {
-    state: "pending" | "processed";
+    state: "executing" | "processed";
     amount: StringifiedBigInt;
     uiAmount: string;
 }
@@ -79,11 +77,12 @@ type CanvasStore = {
     removeEdgeToken: (edgeId: string, tokenId: string) => void;
     // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
-    setEdgeState: (edgeId: string, tokenId: string, status: EdgeTokenState) => void;
+    setEdgeTokenPending: (edgeId: string, tokenId: string) => void;
     addConnection: (connection: Connection, edgeData: EdgeTransactionDataV3) => string;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
     updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => void;
     setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => void;
+    setEdgeTokenEntry: (edgeId: string, tokenId: string, data: TokenEntryData) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -146,6 +145,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 }))
             },
             updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => {
+                const { state, amount, uiAmount } = data;
                 set((s) => ({
                     edges: s.edges.map((e) => {
                         if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
@@ -157,7 +157,7 @@ export const useCanvasStore = create<CanvasStore>()(
                                 tokens: {
                                     ...e.data.tokens,
                                     [tokenId]: {
-                                        ...e.data.tokens[tokenId], totalAmount: data.amount, uiTotalAmount: data.uiAmount,
+                                        ...e.data.tokens[tokenId], totalAmount: amount, uiTotalAmount: uiAmount, state: state
                                     }
                                 }
                             }
@@ -166,18 +166,41 @@ export const useCanvasStore = create<CanvasStore>()(
                 }))
             },
             setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => {
+                const { state, amount, uiAmount } = data;
                 set((s) => ({
                     edges: s.edges.map((e) => {
                         if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
 
                         return {
                             ...e,
+                            data: {
+                                ...e.data,
+                                tokens: {
+                                    ...e.data.tokens,
+                                    [tokenId]: {
+                                        ...e.data.tokens[tokenId], totalAmount: amount, uiTotalAmount: uiAmount, state: state
+                                    }
+                                }
+                            }
                         }
 
                     })
                 }))
             },
-            setEdgeState: (edgeId: string, tokenId: string, txState: "draft" | "pending" | "processed") => {
+            setEdgeTokenEntry: (edgeId: string, tokenId: string, data: TokenEntryData) => {
+                set((s) => ({
+                    edges: s.edges.map((e) => e.id === edgeId && e.data ? {
+                        ...e, data: {
+                            ...e.data,
+                            tokens: {
+                                ...e.data.tokens,
+                                [tokenId]: data,
+                            }
+                        }
+                    } : e)
+                }));
+            },
+            setEdgeTokenPending: (edgeId: string, tokenId: string) => {
                 set((s) => ({
                     edges: s.edges.map((e) => e.id === edgeId && e.data ? {
                         ...e, data: {
@@ -186,7 +209,7 @@ export const useCanvasStore = create<CanvasStore>()(
                                 ...e.data.tokens,
                                 [tokenId]: {
                                     ...e.data.tokens[tokenId],
-                                    status: txState
+                                    status: "pending",
                                 }
                             }
                         }
@@ -198,7 +221,6 @@ export const useCanvasStore = create<CanvasStore>()(
                     edges: s.edges.map((e) => {
                         if (e.id !== edgeId || !e.data || e.data.tokens[tokenId] /*skip if exists*/) return e;
 
-                        console.log("meta", tokenMeta);
                         return {
                             ...e, data: {
                                 ...e.data,
@@ -219,9 +241,12 @@ export const useCanvasStore = create<CanvasStore>()(
                         if (e.id !== edgeId || !e.data) return e;
 
                         const { [tokenId]: _/*excluded*/, ...rest } = e.data.tokens;
-                        console.log("REST", rest)
                         return {
-                            ...e, data: { ...e.data, ...rest }
+                            ...e, data: {
+                                ...e.data, tokens: {
+                                    ...rest
+                                }
+                            }
                         }
                     })
                 }))

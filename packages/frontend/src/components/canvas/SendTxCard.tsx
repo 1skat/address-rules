@@ -1,13 +1,14 @@
 import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
 import React, { useEffect, useRef, useState } from "react";
-import { useCanvasStore, type TokenMeta, type TransactionEdge } from "../../store/useCanvasStore";
-import { isNonEmptyTokens, toSmallestUnit, toUiAmount } from "../../lib/utils";
+import { useCanvasStore, type TokenEntryData, type TokenMeta, type TransactionEdge } from "../../store/useCanvasStore";
+import { toSmallestUnit, toUiAmount } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address, stringifiedBigInt } from "@solana/kit";
 import { AddressLabel } from "../AddressLabel";
 import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
+import { tryCatchAsync } from "../../utils/try-catch";
 
 
 const exampleUserPortfolioStore: Record<string, TokenMeta> = {
@@ -34,35 +35,46 @@ export const SendSolanaTxCard = React.memo(() => {
     const selectedEdgeId = useCanvasStore(s => s.selectedEdgeId);
     const selectedEdge = useCanvasStore(s => s.edges.find(e => e.id === selectedEdgeId));
     const setEdgeSelectedMint = useCanvasStore(s => s.setEdgeSelectedMint);
-    const setEdgeCurrency = useCanvasStore(s => s.setEdgeCurrency);
+    const setEdgeTokenDraftAmount = useCanvasStore(s => s.setEdgeTokenDraftAmount);
     const addEdgeToken = useCanvasStore(s => s.addEdgeToken)
     const removeEdgeToken = useCanvasStore(s => s.removeEdgeToken);
+    const setEdgeTokenEntry = useCanvasStore(s => s.setEdgeTokenEntry);
+    const setEdgeTokenPending = useCanvasStore(s => s.setEdgeTokenPending);
     const nodes = useCanvasStore(s => s.nodes);
     const [amount, setAmount] = useState<bigint>(0n);
     const [pending, setPending] = useState(false);
     const [err, setErr] = useState<Error | null>(null);
-    const edgeRef = useRef<{ edgeId: string, tokenIdOnOpen: string } | null>(null);
+    const edgeRef = useRef<{ edgeId: string, prevTokenId: string, prevTokenEntry: TokenEntryData } | null>(null);
 
     useEffect(() => {
         if (!selectedEdge /*diselected*/ && edgeRef.current) {
-            const { edgeId, tokenIdOnOpen } = edgeRef.current;
+            const { edgeId, prevTokenId, prevTokenEntry } = edgeRef.current;
             const edge = useCanvasStore.getState().edges.find(e => e.id === edgeId);
-            if (!edge || !edge.data) return;
-            const tokenIdToRemove = edge.data.selectedTokenId;
+            if (edge) {
+                const currTokenId = edge.data.selectedTokenId;
+                const currTokenEntry = edge.data.tokens[currTokenId];
 
-            if (tokenIdToRemove !== tokenIdOnOpen && tokenIdToRemove !== "14ce98ee-5006-4bc7-a360-1ff1b826892f") {
-                const tokenEntry = edge.data.tokens[tokenIdToRemove];
-                if (tokenEntry.state === "draft") {
-                    removeEdgeToken(edgeId, tokenIdToRemove)
-                    setEdgeSelectedMint(edgeId, tokenIdOnOpen);
+                if (currTokenId === prevTokenId) { // same token
+                    if (currTokenEntry.state === "draft") {
+                        // fetch from backend?
+                        setEdgeTokenEntry(edgeId, prevTokenId, prevTokenEntry);
+                    }
+                } else {
+                    if (currTokenEntry.state === "draft") {
+                        removeEdgeToken(edgeId, currTokenId)
+                        setEdgeSelectedMint(edgeId, prevTokenId)
+                    }
                 }
             }
+
             edgeRef.current = null;
         }
         if (selectedEdge && edgeRef.current === null) {
-            edgeRef.current = { edgeId: selectedEdge.id, tokenIdOnOpen: selectedEdge.data?.selectedTokenId ?? "14ce98ee-5006-4bc7-a360-1ff1b826892f" } // put to localstorage or index db (cached) as SOL_ADDRESS_UUID
+            const currTokenId = selectedEdge.data.selectedTokenId;
+
+            edgeRef.current = { edgeId: selectedEdge.id, prevTokenId: currTokenId, prevTokenEntry: selectedEdge.data.tokens[currTokenId] } // put to localstorage or index db (cached) as SOL_ADDRESS_UUID
         }
-    }, [removeEdgeToken, setEdgeSelectedMint, selectedEdge])
+    }, [removeEdgeToken, setEdgeSelectedMint, selectedEdge, setEdgeTokenEntry])
 
     if (activeTool !== "cursor" || !selectedEdge) return null;
 
@@ -89,21 +101,31 @@ export const SendSolanaTxCard = React.memo(() => {
                 setErr(new Error("Invalid amount"));
                 return;
             };
-            if (!selectedEdge.data) return;
 
             const fromAddressKpSigner = await deriveKeypair(fromNode?.data.chainId, fromNode?.data.derivationIndex)
             const toAddress = address(toNode?.data.address);
+            const edgeId = selectedEdge.id;
+            const tokenId = selectedEdge.data.selectedTokenId;
 
-            const tokenData = exampleUserPortfolioStore[selectedEdge.data.selectedTokenId];
+            const tokenData = exampleUserPortfolioStore[tokenId];
             if (!tokenData) {
                 console.error(`token data not found`);
                 return
             }
             const ixs = await buildTransferInstruction(fromAddressKpSigner, toAddress, amount, tokenData);
-            const tx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
-            const { orderId } = await sendSolanaTransaction(tx, selectedEdge.id);
-            console.log("requested", orderId);
-            subscribeOrderStatus(orderId, selectedEdge.id, selectedEdge.data.selectedTokenId);
+            const signedTx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
+
+            setEdgeTokenPending(selectedEdge.id, selectedEdge.data.selectedTokenId); // set pending
+            const [acceptedTx, acceptedTxErr] = await tryCatchAsync(() => sendSolanaTransaction(signedTx, selectedEdge.id)); // returns pending + actual amounts
+            if (acceptedTxErr) { // reset back to draft
+                setEdgeTokenDraftAmount(edgeId, tokenId, {
+                    state: "draft",
+                    amount: selectedEdge.data.tokens[tokenId].totalAmount,
+                    uiAmount: selectedEdge.data.tokens[tokenId].uiTotalAmount,
+                })
+                return setErr(acceptedTxErr)
+            }
+            subscribeOrderStatus(acceptedTx?.orderId, selectedEdge.id, selectedEdge.data.selectedTokenId);
         } catch (err) {
             setErr(err)
         } finally {
@@ -128,8 +150,8 @@ export const SendSolanaTxCard = React.memo(() => {
                         if (val) {
                             setAmount(val);
 
-                            // dont allow currency change for non draft states
-                            setEdgeCurrency(selectedEdge.id, selectedEdge.data.selectedTokenId, {
+                            setEdgeTokenDraftAmount(selectedEdge.id, selectedEdge.data.selectedTokenId, {
+                                state: "draft",
                                 amount: stringifiedBigInt(val.toString()),
                                 uiAmount: toUiAmount(val, decimals)
                             });

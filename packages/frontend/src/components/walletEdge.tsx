@@ -1,6 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react"
 import { memo, useCallback } from "react";
-import { useCanvasStore, type EdgeTransactionData, type EdgeTransactionDataV3 } from "../store/useCanvasStore";
+import { useCanvasStore, type EdgeTransactionDataV3 } from "../store/useCanvasStore";
 
 type GetSpecialPathParams = {
     sourceX: number;
@@ -24,8 +24,7 @@ const getSpecialPath = (
     ];
 };
 
-export const WalletEdge = memo(({ id, sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, data }: EdgeProps) => {
-    // const edges = useCanvasStore((s) => s.edges); // can i optimize it?
+export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, data }: EdgeProps) => {
     const isBidirectionalEdge = useCanvasStore(
         useCallback((s) => s.edges.some(e =>
             (e.source === target && e.target === source) ||
@@ -35,7 +34,6 @@ export const WalletEdge = memo(({ id, sourceX, sourceY, sourcePosition, targetPo
 
     if (!data) return;
     const { selectedTokenId, tokens } = data as EdgeTransactionDataV3;
-    console.log("selectedTokenId", selectedTokenId);
     const tokenData = tokens[selectedTokenId];
     if (!tokenData) {
         console.error("no token data found for edgeId")
