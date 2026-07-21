@@ -243,19 +243,32 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
     });
 }
 
+type UserWalletUpdate = {
+    type: "BALANCE_UPDATE";
+    chainId: "501" | "60";
+    data: WalletTokenUpdate[]; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
+}
+type WalletTokenUpdate = { walletAddress: string, updates: TokenUpdate[] }
+type TokenUpdate = {
+    tokenMeta: TokenMeta;
+    balance: {
+        amount: StringifiedBigInt;
+        uiAmount: string;
+    }
+}
+
 const subscribeUserWalletUpdates = async (): Promise<void> => {
     const subId = crypto.randomUUID();
     const route = "/wallets/subscribe-updates";
 
-    const handler = (msg: any) => {
+    const handler = (msg: UserWalletUpdate) => {
         switch (msg.type) {
             case "SNAPSHOT":
                 console.log("INIT:", msg);
                 break;
             case "BALANCE_UPDATE":
-                // update the wallet balance (walletId)
-
                 console.log("UPDATE:", msg);
+                useCanvasStore.getState().updateNodeWalletBalance() // walletId, tokenId,  balance
                 break;
         }
     }

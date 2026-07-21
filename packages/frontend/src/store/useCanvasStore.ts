@@ -46,6 +46,11 @@ export type NodeWalletData = {
 export type NodeWallet = Node<NodeWalletData> & { data: NodeWalletData };
 export type TransactionEdge = Edge<EdgeTransactionDataV3> & { data: EdgeTransactionDataV3 };
 
+export type BalanceData = {
+    amount: StringifiedBigInt;
+    uiAmount: string;
+}
+
 export type BalanceUpdateData = {
     state: "executing" | "processed";
     amount: StringifiedBigInt;
@@ -59,7 +64,7 @@ export type DraftAmountData = {
 }
 
 type CanvasStore = {
-    nodes: Node[];
+    nodes: NodeWallet[];
     edges: TransactionEdge[];
     selectedEdgeId: string | null;
     setNodes: (change: any) => void;
@@ -75,7 +80,9 @@ type CanvasStore = {
     setEdgeTokenPending: (edgeId: string, tokenId: string) => void;
     addConnection: (connection: Connection, edgeData: EdgeTransactionDataV3) => string;
     reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => void;
+    // balances
     updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => void;
+    updateNodeWalletBalance: (walletId: string, tokenId: string, balance: BalanceData) => void;
     setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => void;
     setEdgeTokenEntry: (edgeId: string, tokenId: string, data: TokenEntryData) => void;
 }
@@ -140,6 +147,27 @@ export const useCanvasStore = create<CanvasStore>()(
                         : n,
                     )
                 }));
+            },
+            updateNodeWalletBalance: (nodeId: string, tokenId: string, balance: BalanceData) => {
+                set((s) => ({
+                    nodes: s.nodes.map((n) => {
+                        if (n.id !== nodeId || !n.data.tokens[tokenId]) return n;
+
+                        return {
+                            ...n,
+                            data: {
+                                ...n.data,
+                                tokens: {
+                                    ...n.data.tokens,
+                                    [tokenId]: {
+                                        ...n.data.tokens[tokenId], balanceAmount: balance.amount, uiBalanceAmount: balance.uiAmount,
+                                    }
+
+                                }
+                            }
+                        }
+                    })
+                }))
             },
             updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => {
                 const { state, amount, uiAmount } = data;

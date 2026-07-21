@@ -14,7 +14,7 @@ type UserWalletInit = {
 type UserWalletUpdate = {
     type: "BALANCE_UPDATE";
     chainId: "501" | "60";
-    walletTokenUpdates: WalletTokenUpdate[]; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
+    data: WalletTokenUpdate[]; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
 }
 
 type WalletTokenUpdate = { walletAddress: Address, updates: TokenUpdate[] }
@@ -247,8 +247,7 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
     // WHERE w.account_id = ${userId}
     // `
 
-    // pull user's owned tokens 
-    // TODO (A): probably dont need to actually do it because it need to pull from hot cache then db
+    // TODO (A): probably dont need to actually do it because it need to pull FROM hot-cache ? redis : DB
     const allUserWalletTokens = await sql`
         SELECT w.id as wallet_id, w.address as wallet_address,
         COALESCE(json_agg(
@@ -296,15 +295,14 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
     subsClient.push(userId, topic, msg);
 
     allUserWalletTokens.forEach(wt => startTrackingSolanaAddress(wt.wallet_address, async (txData: GetTranscationResult) => {
-        // note: callbackHandler is used once per signature to update all the wallets inside of it
-        // updates are for the UI only, dont store ata accounts or balances
+        // note: callbackHandler is used once per signature to update all the wallets that are inside that signature
         const changes = parseTxBalancesChanges(txData); // can have multple updates from different wallets
         const walletTokenUpdates = await getWalletTokenUpdates(changes, allUserTokens, (newTokenData: any) => addNewTokenToUserWallet(userId, wt.wallet_address, newTokenData)); // updates is a list of userTokens with updates balances
 
         const msg: UserWalletUpdate = {
             type: "BALANCE_UPDATE",
             chainId: "501",
-            walletTokenUpdates: walletTokenUpdates, // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
+            data: walletTokenUpdates, // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
         }
         return subsClient.push(userId, topic, msg);
     }));
