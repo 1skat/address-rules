@@ -116,14 +116,14 @@ export const SendSolanaTxCard = React.memo(() => {
             const signedTx = await buildSolanaTransaction(fromAddressKpSigner, ixs); // get a signature here locally
 
             setEdgeTokenPending(selectedEdge.id, selectedEdge.data.selectedTokenId); // set pending
-            const [acceptedTx, acceptedTxErr] = await tryCatchAsync(() => sendSolanaTransaction(signedTx, selectedEdge.id)); // returns pending + actual amounts
-            if (acceptedTxErr) { // reset back to draft
+            const [acceptedTx, acceptedTxErr] = await tryCatchAsync(() => sendSolanaTransaction(signedTx, selectedEdge.id, tokenId)); // returns pending + actual amounts
+            if (acceptedTxErr) { // reset back to draft, but i losess the prev token entry data - fetch it from the backend or handle
                 setEdgeTokenDraftAmount(edgeId, tokenId, {
                     state: "draft",
                     amount: selectedEdge.data.tokens[tokenId].totalAmount,
                     uiAmount: selectedEdge.data.tokens[tokenId].uiTotalAmount,
-                })
-                return setErr(acceptedTxErr)
+                });
+                return setErr(acceptedTxErr);
             }
             subscribeOrderStatus(acceptedTx?.orderId, selectedEdge.id, selectedEdge.data.selectedTokenId);
         } catch (err) {

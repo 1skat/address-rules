@@ -3,7 +3,7 @@ import '@xyflow/react/dist/base.css';
 import React, { useCallback, useMemo } from 'react';
 import { CanvasToolbar } from './CanvasToolbar';
 import { useCanvasStore } from '../../store/useCanvasStore';
-import { WalletNode } from '../walletNode';
+import { WalletNode } from '../WalletNode';
 import { getStoredViewport, saveViewport } from '../../store/canvasViewport';
 import { WalletEdge } from '../WalletEdge';
 import { ConnectionLine } from '../connectionLine';

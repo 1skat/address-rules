@@ -50,23 +50,6 @@ export const useEdgeInteraction = () => {
     }, [removeEdge, setSelectedEdgeId])
 
     const addConnectionEdge = async (connection: Connection) => {
-        // const txEdge: EdgeTransactionData = {
-        //     chainId: "501",
-        //     selectedMint: "11111111111111111111111111111111",
-        //     state: "draft", // state: "draft", "pending", "processed"
-        //     tokens: {
-        //         ["11111111111111111111111111111111"]: {
-        //             tokenMeta: {
-        //                 mint: "11111111111111111111111111111111",
-        //                 symbol: "SOL",
-        //                 name: "Solana",
-        //                 decimals: 9,
-        //             },
-        //             totalAmount: stringifiedBigInt("0"),
-        //             uiTotalAmount: "0",
-        //         }
-        //     },
-        // }
         const txEdge: EdgeTransactionDataV3 = {
             chainId: "501",
             selectedTokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f", // cache in localstorage or index db

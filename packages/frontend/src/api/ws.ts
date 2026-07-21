@@ -109,7 +109,7 @@ export const connectWs = (token: string) => {
                 if (msg.status === 200) {
                     pendingReq.resolve(msg.data); // e.g orderId from /transactions/send
                 } else {
-                    pendingReq.reject(new Error(`Failed: ${msg.status}`));
+                    pendingReq.reject(new Error(msg.error?.code ?? "Server error")); // handle message from codes, dont allow for topoloy
                 }
                 break;
             }
@@ -167,9 +167,9 @@ export const sendSolanaTransaction = async (
         lastValidBlockHeight: any;
     },
     edgeId: string,
+    tokenId: string,
 ) =>
-    sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx, edgeId });
-
+    sendWsMessage<{ orderId: string }>("/transactions/send", { signedTx, edgeId, tokenId });
 
 type EdgeTokenData = {
     mint: string;
@@ -185,7 +185,7 @@ type SocketError = {
     message?: string;
 }
 export type OrderStatus =
-    | { edgeId: string, tokenId: string, status: "EXECUTING" }
+    | { edgeId: string, tokenId: string, status: "EXECUTING", data: EdgeTokenData }
     | { edgeId: string, tokenId: string, status: "FILLED", data: EdgeTokenData }
     | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
 
@@ -206,20 +206,21 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
         switch (msg.status) {
             case "EXECUTING": {
                 console.log("tx executing")
-                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.tokenId, "pending")
+                const { data } = msg;
+                useCanvasStore.getState().updateEdgeTokenBalance(msg.edgeId, msg.tokenId, {
+                    state: "executing",
+                    amount: data.totalAmountInfo.amount,
+                    uiAmount: data.totalAmountInfo.uiAmount,
+                })
                 break;
             }
             case "FILLED": {
                 const { data } = msg;
-                useCanvasStore.getState().setEdgeState(msg.edgeId, msg.tokenId, "processed");
-                useCanvasStore.getState().setEdgeCurrency( // only updates the balanaces, the metadata has to exist
-                    edgeId,
-                    msg.tokenId,
-                    {
-                        amount: data.totalAmountInfo.amount,
-                        uiAmount: data.totalAmountInfo.uiAmount,
-                    }
-                );
+                useCanvasStore.getState().updateEdgeTokenBalance(msg.edgeId, msg.tokenId, {
+                    state: "processed",
+                    amount: data.totalAmountInfo.amount,
+                    uiAmount: data.totalAmountInfo.uiAmount,
+                });
                 unsubscribe();
                 break;
             }

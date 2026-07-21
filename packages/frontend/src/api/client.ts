@@ -6,7 +6,7 @@ import { deriveWallet } from "../lib/bip39";
 import type { Connection, XYPosition } from "@xyflow/react";
 import type { Base64EncodedWireTransaction, Blockhash, Signature } from "@solana/kit"
 import { wipeSeed } from "../lib/seed";
-import type { EdgeTransactionDataV2 } from "../store/useCanvasStore";
+import type { EdgeTransactionDataV2, EdgeTransactionDataV3 } from "../store/useCanvasStore";
 
 const BASE_URL = "http://localhost:3000"
 
@@ -96,7 +96,7 @@ export const logout = async () => {
     }
 }
 
-export const createEdge = async (edgeId: string, connection: Connection, edgeData: EdgeTransactionDataV2): Promise<void> => {
+export const createEdge = async (edgeId: string, connection: Connection, edgeData: EdgeTransactionDataV3): Promise<void> => {
     const resp = await apiFetch("/edges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

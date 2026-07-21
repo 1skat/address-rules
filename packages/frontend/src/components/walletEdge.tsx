@@ -24,6 +24,12 @@ const getSpecialPath = (
     ];
 };
 
+// const animationCss = {
+//     "processed": undefined,
+//     "pending": "pulse 1.5s ease-in-out infinite",
+//     "draft": undefined,
+// }
+
 export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPosition, targetX, targetY, source, target, data }: EdgeProps) => {
     const isBidirectionalEdge = useCanvasStore(
         useCallback((s) => s.edges.some(e =>
@@ -53,7 +59,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                 style={{
                     strokeWidth: 2,
                     strokeDasharray: '5 10',
-                    // animation: "dashMove 1.5s linear infinite" // dynamic on pending (flashing) moving on finalized
+                    // animation: animationCss[tokenData.state]
                 }}
             />
             <EdgeLabelRenderer>
@@ -64,7 +70,6 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    {/* <span>{totals[selectedMint].uiAmount} {totals[selectedMint].tokenMeta.symbol}</span> */}
                     <span>{tokenData.uiTotalAmount} {tokenData.tokenMeta.symbol}</span >
                 </div>
             </EdgeLabelRenderer>

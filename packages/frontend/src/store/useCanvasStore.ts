@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
 
+export type TransactionState = "draft" | "pending" | "executing" | "processed";
+
 export type TokenMeta = {
     tokenId: string;
     chainId: string;
@@ -14,7 +16,7 @@ export type TokenMeta = {
 }
 
 export type TokenEntryData = {
-    state: "draft" | "pending" | "processed";
+    state: TransactionState;
     tokenMeta: TokenMeta;
     totalAmount: StringifiedBigInt;
     uiTotalAmount: string;
@@ -26,27 +28,22 @@ export type EdgeTransactionDataV3 = {
     tokens: Record<string, TokenEntryData>;
 }
 
-export type EdgeTransactionData =
-    | {
-        state: "draft" | "pending" | "processed";
-        chainId: "501";
-        selectedMint: string;
-        tokens: Record<string, {
-            tokenMeta: TokenMeta;
-            totalAmount: StringifiedBigInt;
-            uiTotalAmount: string;
-        }>;
-    }
-    | {
-        state: "draft" | "pending" | "processed";
-        chainId: "60";
-        selectedMint: string;
-        tokens: Record<string, {
-            tokenMeta: TokenMeta;
-            totalAmount: StringifiedBigInt;
-            uiTotalAmount: string;
-        }>;
-    };
+export type TokenBalanceInfo = {
+    tokenMeta: TokenMeta;
+    balanceAmount: StringifiedBigInt;
+    uiBalanceAmount: string;
+}
+
+export type NodeWalletData = {
+    derivationIndex: `${number}`, // fix later
+    chainId: "501",
+    address: string,
+    alias: string | null,
+    selectedTokenId: string;
+    tokens: Record<string, TokenBalanceInfo>
+}
+
+export type NodeWallet = Node<NodeWalletData> & { data: NodeWalletData };
 export type TransactionEdge = Edge<EdgeTransactionDataV3> & { data: EdgeTransactionDataV3 };
 
 export type BalanceUpdateData = {
@@ -63,19 +60,17 @@ export type DraftAmountData = {
 
 type CanvasStore = {
     nodes: Node[];
+    edges: TransactionEdge[];
+    selectedEdgeId: string | null;
     setNodes: (change: any) => void;
-    addNode: (node: Node) => void;
+    addNode: (node: NodeWallet) => void;
     removeNode: (id: string) => void;
     removeEdge: (id: string) => void;
-    edges: TransactionEdge[];
-    // selectedEdge: TransactionEdge | null;
-    // setSelectedEdge: (edge: TransactionEdge | null) => void;
-    selectedEdgeId: string | null;
     setSelectedEdgeId: (edgeId: string | null) => void;
     setEdgeSelectedMint: (edgeId: string, tokenId: string) => void;
+    setNodeSelectedMint: (nodeId: string, tokenId: string) => void;
     addEdgeToken: (edgeId: string, chainId: string, tokenMeta: TokenMeta) => void;
     removeEdgeToken: (edgeId: string, tokenId: string) => void;
-    // getSelectedEdge: () => TransactionEdge | null;
     setEdges: (change: any) => void;
     setEdgeTokenPending: (edgeId: string, tokenId: string) => void;
     addConnection: (connection: Connection, edgeData: EdgeTransactionDataV3) => string;
@@ -95,9 +90,7 @@ export const useCanvasStore = create<CanvasStore>()(
             setSelectedEdgeId: (edgeId: string | null) => {
                 return set({ selectedEdgeId: edgeId });
             },
-            // getSelectedEdge: () => get().edges.find(e => e.id === get().selectedEdgeId) ?? null,
             setNodes: (change) => set((s) => ({ nodes: applyNodeChanges(change, s.nodes) })), // update the eniter array
-            // addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
             addNode: (node) => {
                 console.log("adding node", node);
                 set((s) => ({ nodes: [...s.nodes, node] }))
@@ -126,10 +119,6 @@ export const useCanvasStore = create<CanvasStore>()(
             setEdges: (change) => set((s) => {
                 return { edges: applyEdgeChanges(change, s.edges) }
             }),
-            // setSelectedEdge: (edge: TransactionEdge | null) => {
-            //     console.log("selected edge:", edge)
-            //     return set({ selectedEdge: edge })
-            // },
             reconnectEdge: (oldEdge: TransactionEdge, newConnection: Connection) => {
                 console.log(oldEdge.id)
                 set((s) => ({
@@ -143,6 +132,14 @@ export const useCanvasStore = create<CanvasStore>()(
                         : e,
                     )
                 }))
+            },
+            setNodeSelectedMint: (nodeId: string, tokenId: string) => {
+                set((s) => ({
+                    nodes: s.nodes.map((n) => n.id === nodeId
+                        ? { ...n, data: { ...n.data, selectedTokenId: tokenId } }
+                        : n,
+                    )
+                }));
             },
             updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => {
                 const { state, amount, uiAmount } = data;
@@ -261,7 +258,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
 
 // const accumulateTotals = (e: TransactionEdge, data: CurrencyUpdateData): TransactionEdge => {
-//     console.log(`accumulate totals for ${e.id}`, data);
+//     console.log(`accumulate totals for ${ e.id }`, data);
 //     const { mint, tokenMeta, amountInfo } = data;
 //     const prev = e.data?.tokens[mint] // null on new
 //     const newAmount = (prev ? BigInt(prev.totalAmount) : BigInt(0)) + BigInt(amountInfo.amount);

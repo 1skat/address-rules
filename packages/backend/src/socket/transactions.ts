@@ -1,5 +1,5 @@
 import { sendAndConfirmSolanaTransaction } from "@/internal/rpc.js";
-import { tryCatchAsync } from "@/utils/try-catch.js";
+import { tryCatch, tryCatchAsync } from "@/utils/try-catch.js";
 import { subsClient, wsClient, type SocketError } from "@/ws_client.js";
 import { getBase64Encoder, getTransactionDecoder, type Blockhash, assertIsFullySignedTransaction, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED, isSolanaError, getCompiledTransactionMessageDecoder, decompileTransactionMessage, type Address, type Instruction, type StringifiedBigInt, stringifiedBigInt, address, type Base64EncodedWireTransaction, getBase58Decoder, type CompiledTransactionMessage, type Signature } from "@solana/kit";
 import {
@@ -39,7 +39,7 @@ type EdgeTokenData = {
 }
 
 export type OrderStatus =
-    | { edgeId: string, tokenId: string, status: "EXECUTING" }
+    | { edgeId: string, tokenId: string, status: "EXECUTING", data: EdgeTokenData }
     | { edgeId: string, tokenId: string, status: "FILLED", data: EdgeTokenData }
     | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
 
@@ -77,35 +77,18 @@ const setAndPushOrderStatus = (userId: string, orderId: string, os: OrderStatus)
     return subsClient.push(userId, "order_status", os);
 }
 
-export const sendTransaction = (userId: string, id: string, data: any) => {
+export const sendTransaction = async (userId: string, id: string, data: any) => {
     const { signedTx, edgeId, tokenId } = data;
-    const op = 9;
+    const orderId = crypto.randomUUID();
 
     if (!signedTx) {
         return wsClient.pub(userId, {
-            op,
+            op: 9,
             id,
             status: 400,
-            error: { code: "MISSING_TX", message: "Transaction required" },
+            error: { code: "MISSING_TX" },
         });
     }
-
-    const orderId = crypto.randomUUID();
-
-    setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTING" }); // only send it here to avoid the reace condition
-    processTx(userId, orderId, data);
-
-    return wsClient.pub(userId, {
-        op,
-        id,
-        status: 200,
-        data: { orderId },
-    });
-}
-
-export const processTx = async (userId: string, orderId: string, data: any) => {
-    // zod
-    const { signedTx, edgeId, tokenId } = data;
 
     try {
         const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
@@ -117,20 +100,34 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
                 lastValidBlockHeight: BigInt(signedTx.lastValidBlockHeight),
             }
         }
-        assertIsFullySignedTransaction(fullTx);
-
+        const [, malformedTxErr] = tryCatch(() => assertIsFullySignedTransaction(fullTx));
+        if (malformedTxErr) {
+            wsClient.pub(userId, {
+                op: 9, // is it 9?
+                id,
+                status: 400,
+                error: { code: "MALFORMED_TX" },
+            });
+        }
         const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
         const parsedTx = await parseTransfer(compiled);
         if (!parsedTx) {
-            console.error("failed parsing tx");
-            return
+            return wsClient.pub(userId, {
+                op: 9,
+                id,
+                status: 400,
+                error: { code: "MALFORMED_TX" },
+            });
         }
 
         if (parsedTx.tokenMeta.tokenId !== tokenId) {
-            console.error("token ids do not match")
-            return
+            return wsClient.pub(userId, {
+                op: 9,
+                id,
+                status: 400,
+                error: { code: "TOKEN_ID_NOT_FOUND" },
+            });
         }
-
         const sigBytes = fullTx.signatures[parsedTx.from]
         if (!sigBytes) {
             console.error("expected signature not found for sender", parsedTx.from);
@@ -139,7 +136,25 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         const sig = getBase58Decoder().decode(sigBytes) as Signature;
         parsedTx.signature = sig;
 
-        const [tx] = await sql`
+        setAndPushOrderStatus(userId, orderId, {
+            edgeId, tokenId, status: "EXECUTING", data: {
+                mint: parsedTx.tokenMeta.mint, // i dont need that
+                tokenMeta: parsedTx.tokenMeta, // dont need that, cuz the meta alreadt exists or the call is made
+                totalAmountInfo: {
+                    amount: parsedTx.amountInfo.amount,
+                    uiAmount: parsedTx.amountInfo.uiAmount,
+                }
+            }
+        }); // only send it here to avoid the reace condition
+
+        wsClient.pub(userId, {
+            op: 9,
+            id,
+            status: 200,
+            data: { orderId },
+        });
+
+        await sql`
         INSERT INTO transactions (order_id, edge_id, token_id, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
         VALUES (
             ${orderId},
@@ -155,7 +170,7 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
             RETURNING *; 
             `;
 
-        const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
+        const [, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
         if (txErr) {
             const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
@@ -166,13 +181,13 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
         const totalAmount: string = await sql.begin(async sql => {
             await sql`UPDATE transactions SET status = 'FILLED' WHERE order_id = ${orderId}`;
             const [total] = await sql`
-            INSERT INTO edge_token_totals (edge_id, token_id, total_amount)
-            SELECT ${edgeId}, ${parsedTx.tokenMeta.tokenId}, COALESCE(SUM(amount), 0)
-            FROM transactions
-            WHERE edge_id = ${edgeId} AND token_id = ${parsedTx.tokenMeta.tokenId} AND status = 'FILLED'
-            ON CONFLICT (edge_id, token_id) DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()
-            RETURNING total_amount
-            `;
+                INSERT INTO edge_token_totals (edge_id, token_id, total_amount)
+                SELECT ${edgeId}, ${parsedTx.tokenMeta.tokenId}, COALESCE(SUM(amount), 0)
+                FROM transactions
+                WHERE edge_id = ${edgeId} AND token_id = ${parsedTx.tokenMeta.tokenId} AND status = 'FILLED'
+                ON CONFLICT (edge_id, token_id) DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()
+                RETURNING total_amount
+                `;
             if (!total) throw new Error();
 
             return total.total_amount;
@@ -192,11 +207,130 @@ export const processTx = async (userId: string, orderId: string, data: any) => {
             }
         });
     } catch (err) {
-        console.error(err)
         await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
         return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
     }
 }
+
+// export const sendTransaction = (userId: string, id: string, data: any) => {
+//     const { signedTx, edgeId, tokenId } = data;
+//     const op = 9;
+
+//     if (!signedTx) {
+//         return wsClient.pub(userId, {
+//             op,
+//             id,
+//             status: 400,
+//             error: { code: "MISSING_TX", message: "Transaction required" },
+//         });
+//     }
+
+//     const orderId = crypto.randomUUID();
+
+//     setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTING" }); // only send it here to avoid the reace condition
+//     processTx(userId, orderId, data);
+
+//     return wsClient.pub(userId, {
+//         op,
+//         id,
+//         status: 200,
+//         data: { orderId },
+//     });
+// }
+
+// export const processTx = async (userId: string, orderId: string, data: any) => {
+//     // zod
+//     const { signedTx, edgeId, tokenId } = data;
+
+//     try {
+//         const wireTxBytes = getBase64Encoder().encode(signedTx.wireTx);
+//         const decodedWireTx = getTransactionDecoder().decode(wireTxBytes);
+//         const fullTx = {
+//             ...decodedWireTx,
+//             lifetimeConstraint: {
+//                 blockhash: signedTx.blockhash,
+//                 lastValidBlockHeight: BigInt(signedTx.lastValidBlockHeight),
+//             }
+//         }
+//         assertIsFullySignedTransaction(fullTx);
+
+//         const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
+//         const parsedTx = await parseTransfer(compiled);
+//         if (!parsedTx) {
+//             console.error("failed parsing tx");
+//             return
+//         }
+
+//         if (parsedTx.tokenMeta.tokenId !== tokenId) {
+//             console.error("token ids do not match")
+//             return
+//         }
+
+//         const sigBytes = fullTx.signatures[parsedTx.from]
+//         if (!sigBytes) {
+//             console.error("expected signature not found for sender", parsedTx.from);
+//             return;
+//         }
+//         const sig = getBase58Decoder().decode(sigBytes) as Signature;
+//         parsedTx.signature = sig;
+
+//         const [tx] = await sql`
+//         INSERT INTO transactions (order_id, edge_id, token_id, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
+//         VALUES (
+//             ${orderId},
+//             ${edgeId},
+//             ${parsedTx.tokenMeta.tokenId},
+//             ${parsedTx.amountInfo.amount},
+//             ${parsedTx.amountInfo.uiAmount},
+//             ${parsedTx.amountInfo.feeAmount},
+//             ${parsedTx.amountInfo.uiFeeAmount},
+//             ${parsedTx.signature},
+//             'EXECUTING'
+//             )
+//             RETURNING *; 
+//             `;
+
+//         const [_, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
+
+//         if (txErr) {
+//             const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
+//             await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
+//             return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: errCode } });
+//         }
+
+//         const totalAmount: string = await sql.begin(async sql => {
+//             await sql`UPDATE transactions SET status = 'FILLED' WHERE order_id = ${orderId}`;
+//             const [total] = await sql`
+//             INSERT INTO edge_token_totals (edge_id, token_id, total_amount)
+//             SELECT ${edgeId}, ${parsedTx.tokenMeta.tokenId}, COALESCE(SUM(amount), 0)
+//             FROM transactions
+//             WHERE edge_id = ${edgeId} AND token_id = ${parsedTx.tokenMeta.tokenId} AND status = 'FILLED'
+//             ON CONFLICT (edge_id, token_id) DO UPDATE SET total_amount = EXCLUDED.total_amount, updated_at = now()
+//             RETURNING total_amount
+//             `;
+//             if (!total) throw new Error();
+
+//             return total.total_amount;
+//         });
+//         if (!totalAmount) {
+//             return;
+//         }
+
+//         return setAndPushOrderStatus(userId, orderId, {
+//             edgeId, tokenId, status: "FILLED", data: {
+//                 mint: parsedTx.tokenMeta.mint, // i dont need that
+//                 tokenMeta: parsedTx.tokenMeta, // dont need that, cuz the meta alreadt exists or the call is made
+//                 totalAmountInfo: {
+//                     amount: stringifiedBigInt(totalAmount),
+//                     uiAmount: toUiAmount(BigInt(totalAmount), parsedTx.tokenMeta.decimals),
+//                 }
+//             }
+//         });
+//     } catch (err) {
+//         await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
+//         return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
+//     }
+// }
 
 export const ackSubscribedOrderStatus = async (userId: string, topic: string, payload: any) => {
     const { orderId, edgeId } = payload;

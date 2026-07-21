@@ -40,7 +40,9 @@ export const deriveWallet = async (chainId: string, nextDerivationIdx: number) =
     if (!seed) throw new Error("Vault is locked");
 
     switch (chainId) {
-        case "501": return await deriveSolanaWallet(seed, nextDerivationIdx);
+        case "501": {
+            return await deriveSolanaWallet(seed, nextDerivationIdx);
+        }
         default: throw new Error("unsupported chain");
     }
 }
