@@ -27,6 +27,8 @@ const _rpcResultHint = solanaRpc.getTransaction('' as Signature, { encoding: 'js
 type GetTranscationResult = NonNullable<Awaited<ReturnType<typeof _rpcResultHint['send']>>>;
 
 type TokenUpdate = {
+    isNewToken: boolean;
+    tokenId: string;
     tokenMeta: TokenMeta;
     balance: {
         amount: StringifiedBigInt;
@@ -98,21 +100,26 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
 
     return balanceChanges;
 }
+const addNewTokenToDB = async () => {
+    // need to fetch the tokens mata off chain based on mint then add it to the db and return the tokeMeta
+}
+
 const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Address, tokenMint: Address): Promise<TokenMeta | null> => {
+    // just simulating
     console.log("adding new token to db...")
     if (tokenMint === "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") {
         const [token] = await sql`
         WITH inserted AS (
-            INSERT INTO tokens (id, chain_id, address, symbol, name, decimals, deployed_at)  
-            VALUES ('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641))
-            ON CONFLICT (chain_id,address) DO NOTHING
+        INSERT INTO tokens(id, chain_id, address, symbol, name, decimals, deployed_at)  
+            VALUES('501', '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'USDC', 'USDC', 6, to_timestamp(1721427641))
+            ON CONFLICT(chain_id, address) DO NOTHING
             RETURNING *
         )
         SELECT * FROM inserted
         UNION ALL
         SELECT * FROM tokens
         WHERE address = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
-        AND NOT EXISTS (SELECT 1 FROM inserted)
+        AND NOT EXISTS(SELECT 1 FROM inserted)
         `
         if (!token) return null;
 
@@ -157,16 +164,21 @@ const getWalletTokenUpdatesV2 = async (
             console.error("token meta missing")
             continue;
         }
-        const [inserted, err] = await tryCatchAsync(() => sql`
-        INSERT INTO wallet_tokens (wallet_id, token_id)
-        VALUES(${change.walletId}, ${token.tokenId})
-        ON CONFLICT (wallet_id, token_id) DO NOTHING`);
+        const [inserted, err] = await tryCatchAsync(() =>
+            // it runs over all wallets in change
+            sql`
+                INSERT INTO wallet_tokens(wallet_id, token_id)
+                VALUES(${change.walletId}, ${token.tokenId})
+                ON CONFLICT(wallet_id, token_id) DO NOTHING
+                RETURNING * `);
         if (err) {
             throw new Error("Adding token to user wallet");
         }
-        console.log("inserted", inserted);
 
+        console.log("new token inserted", inserted.length > 0, inserted)
         userTokenUpdates.push({
+            isNewToken: inserted.length > 0,
+            tokenId: token.tokenId,
             tokenMeta: {
                 tokenId: token.tokenId,
                 chainId: token.chainId,
@@ -188,7 +200,7 @@ const getWalletTokenUpdatesV2 = async (
 
 export const ackSubscribedUserWallets = async (userId: string, topic: string): Promise<void> => {
     // TODO (A): probably dont need to actually do it because it need to pull FROM hot-cache ? redis : DB
-    const allUserWallets = await sql`SELECT id, address FROM wallets w WHERE w.archived = false AND w.account_id = ${userId}`;
+    const allUserWallets = await sql`SELECT id, address FROM wallets w WHERE w.archived = false AND w.account_id = ${userId} `;
     const allTokens = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501'`;
 
     allUserWallets.forEach(w => userWalletsStore.set(w.address, { id: w.id, address: address(w.address) }));

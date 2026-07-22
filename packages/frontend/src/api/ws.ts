@@ -250,6 +250,8 @@ type UserWalletUpdate = {
 }
 type WalletTokenUpdates = Record<string, TokenUpdate[]>;
 type TokenUpdate = {
+    isNewToken: boolean;
+    tokenId: string;
     tokenMeta: TokenMeta;
     balance: {
         amount: StringifiedBigInt;
@@ -262,6 +264,7 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
     const route = "/wallets/subscribe-updates";
 
     const handler = (msg: UserWalletUpdate) => {
+        console.log("new msg", msg)
         switch (msg.type) {
             case "SNAPSHOT": {
                 console.log("INIT:", msg);
@@ -271,12 +274,13 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
                 const { data } = msg;
                 Object.entries(data).map(([walletId, tokenUpdates]) => {
                     for (const tu of tokenUpdates) {
-                        useCanvasStore.getState().updateNodeWalletBalance()
+                        if (tu.isNewToken) {
+                            useCanvasStore.getState().addNodeWalletToken(walletId, tu.tokenId, tu.tokenMeta)
+                        }
+                        useCanvasStore.getState().updateNodeWalletBalance(walletId, tu.tokenId, tu.balance)
 
                     }
                 });
-
-
                 break;
             }
         }

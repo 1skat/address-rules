@@ -84,7 +84,9 @@ type CanvasStore = {
     updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => void;
     updateNodeWalletBalance: (walletId: string, tokenId: string, balance: BalanceData) => void;
     setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => void;
+    // token meta
     setEdgeTokenEntry: (edgeId: string, tokenId: string, data: TokenEntryData) => void;
+    addNodeWalletToken: (walletId: string, tokenId: string, data: TokenMeta) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -163,6 +165,28 @@ export const useCanvasStore = create<CanvasStore>()(
                                         ...n.data.tokens[tokenId], balanceAmount: balance.amount, uiBalanceAmount: balance.uiAmount,
                                     }
 
+                                }
+                            }
+                        }
+                    })
+                }))
+            },
+            addNodeWalletToken: (walletId: string, tokenId: string, data: TokenMeta) => {
+                set((s) => ({
+                    nodes: s.nodes.map((w) => {
+                        if (w.id !== walletId || !w.data.tokens[tokenId]) return w;
+
+                        return {
+                            ...w,
+                            data: {
+                                ...w.data,
+                                tokens: {
+                                    ...w.data.tokens,
+                                    [tokenId]: {
+                                        tokenMeta: data,
+                                        balanceAmount: stringifiedBigInt("0"),
+                                        uiBalanceAmount: "0",
+                                    }
                                 }
                             }
                         }
