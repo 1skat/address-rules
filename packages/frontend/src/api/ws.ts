@@ -246,9 +246,9 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
 type UserWalletUpdate = {
     type: "BALANCE_UPDATE";
     chainId: "501" | "60";
-    data: WalletTokenUpdate[]; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
+    data: WalletTokenUpdates; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
 }
-type WalletTokenUpdate = { walletAddress: string, updates: TokenUpdate[] }
+type WalletTokenUpdates = Record<string, TokenUpdate[]>;
 type TokenUpdate = {
     tokenMeta: TokenMeta;
     balance: {
@@ -263,13 +263,22 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
 
     const handler = (msg: UserWalletUpdate) => {
         switch (msg.type) {
-            case "SNAPSHOT":
+            case "SNAPSHOT": {
                 console.log("INIT:", msg);
                 break;
-            case "BALANCE_UPDATE":
-                console.log("UPDATE:", msg);
-                useCanvasStore.getState().updateNodeWalletBalance() // walletId, tokenId,  balance
+            }
+            case "BALANCE_UPDATE": {
+                const { data } = msg;
+                Object.entries(data).map(([walletId, tokenUpdates]) => {
+                    for (const tu of tokenUpdates) {
+                        useCanvasStore.getState().updateNodeWalletBalance()
+
+                    }
+                });
+
+
                 break;
+            }
         }
     }
 

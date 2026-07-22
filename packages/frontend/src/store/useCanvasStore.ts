@@ -148,10 +148,10 @@ export const useCanvasStore = create<CanvasStore>()(
                     )
                 }));
             },
-            updateNodeWalletBalance: (nodeId: string, tokenId: string, balance: BalanceData) => {
+            updateNodeWalletBalance: (walletId: string, tokenId: string, balance: BalanceData) => {
                 set((s) => ({
                     nodes: s.nodes.map((n) => {
-                        if (n.id !== nodeId || !n.data.tokens[tokenId]) return n;
+                        if (n.id !== walletId || !n.data.tokens[tokenId]) return n;
 
                         return {
                             ...n,
