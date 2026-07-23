@@ -6,25 +6,24 @@ import { subsClient } from "@/ws_client.js";
 import { address, stringifiedBigInt, type Address, type Lamports, type Signature, type StringifiedBigInt, type StringifiedNumber } from "@solana/kit";
 import util, { inspect } from "util";
 import type { TokenMeta } from "./transactions.js";
-import { tokensStore, userWalletsStore } from "./mem_cache.js";
+import { tokensStore } from "./mem_cache.js";
 import { tryCatchAsync } from "@/utils/try-catch.js";
 
-type UserWalletInit = {
-    type: "SNAPSHOT";
-    snapshot: { [k: string]: { id: string, address: Address } };
-}
-type UserWalletUpdate = {
-    type: "BALANCE_UPDATE";
-    chainId: "501" | "60";
-    data: WalletTokenUpdates; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
-}
+export const WALLET_UPDATE_TOPIC = "wallet_update";
+type UserWalletUpdate =
+    | {
+        type: "INIT";
+    }
+    | {
+        type: "BALANCE_UPDATE";
+        data: WalletTokenUpdates;
+    }
 type WalletId = string;
 
-// type WalletTokenUpdate = { walletId: WalletId, updates: TokenUpdate[] }
 type WalletTokenUpdates = Record<WalletId, TokenUpdate[]>;
 
 const _rpcResultHint = solanaRpc.getTransaction('' as Signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, });
-type GetTranscationResult = NonNullable<Awaited<ReturnType<typeof _rpcResultHint['send']>>>;
+export type GetTranscationResult = NonNullable<Awaited<ReturnType<typeof _rpcResultHint['send']>>>;
 
 type TokenUpdate = {
     isNewToken: boolean;
@@ -37,7 +36,6 @@ type TokenUpdate = {
 }
 type WalletTokenBalanceChange = {
     walletId: string,
-    // walletAddress: Address,
     mint: Address,
     amountInfo: {
         amount: StringifiedBigInt;
@@ -56,7 +54,7 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
 
     for (const [idx, ak] of transaction.message.accountKeys.entries()) {
         if (walletStore.has(ak.pubkey) && meta.preBalances[idx] !== meta.postBalances[idx]) { // this gives only tracked user's wallet addresses
-            const walletId = userWalletsStore.get(ak.pubkey)?.id;
+            const walletId = walletStore.get(ak.pubkey)?.id;
             if (!walletId) continue;
 
             balanceChanges.push({
@@ -79,14 +77,13 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
 
             const preB = preTokenBalancesMap.get(postB.accountIndex);
             if (!preB /* new post balance, new token */ || preB.uiTokenAmount.amount !== postB.uiTokenAmount.amount) {
-                const walletId = userWalletsStore.get(postB.owner)?.id; // check wether a new token's owner is a user's wallet address that is being tracked
+                const walletId = walletStore.get(postB.owner)?.id; // check wether a new token's owner is a user's wallet address that is being tracked
                 if (!walletId) {
                     console.error(`SKIPPED: wallet ${postB.owner} isnt being tracked. postBalance: ${postB}`,)
                     continue;
                 }
                 balanceChanges.push({
                     walletId,
-                    // walletAddress: postB.owner,
                     mint: postB.mint,
                     amountInfo: {
                         amount: postB.uiTokenAmount.amount,
@@ -100,11 +97,11 @@ const parseTxBalancesChanges = (data: GetTranscationResult): WalletTokenBalanceC
 
     return balanceChanges;
 }
-const addNewTokenToDB = async () => {
-    // need to fetch the tokens mata off chain based on mint then add it to the db and return the tokeMeta
-}
+// const addNewTokenToDB = async (tokneMint: Address) => {
+//     // need to fetch the tokens mata off chain based on mint then add it to the db and return the tokeMeta
+// }
 
-const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Address, tokenMint: Address): Promise<TokenMeta | null> => {
+const addNewTokenToDB = async (tokenMint: Address): Promise<TokenMeta | null> => {
     // just simulating
     console.log("adding new token to db...")
     if (tokenMint === "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU") {
@@ -151,7 +148,6 @@ const addNewTokenToUserWallet = async (userId: string, userWalletAddress: Addres
 
 const getWalletTokenUpdatesV2 = async (
     changes: WalletTokenBalanceChange[],
-    handleNewToken: (tokenMint: Address) => Promise<TokenMeta | null>
 ): Promise<WalletTokenUpdates> => {
     if (!changes) throw new Error("NO_CHANGES");
     const updates: WalletTokenUpdates = {};
@@ -159,7 +155,7 @@ const getWalletTokenUpdatesV2 = async (
     for (const change of changes) {
         const userTokenUpdates = updates[change.walletId] ??= [];
 
-        const token = tokensStore.get(change.mint) ?? await handleNewToken(change.mint);
+        const token = tokensStore.get(change.mint) ?? await addNewTokenToDB(change.mint);
         if (!token) {
             console.error("token meta missing")
             continue;
@@ -199,12 +195,58 @@ const getWalletTokenUpdatesV2 = async (
 
 
 export const ackSubscribedUserWallets = async (userId: string, topic: string): Promise<void> => {
-    // TODO (A): probably dont need to actually do it because it need to pull FROM hot-cache ? redis : DB
-    const allUserWallets = await sql`SELECT id, address FROM wallets w WHERE w.archived = false AND w.account_id = ${userId} `;
-    const allTokens = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501'`;
+    const msg: UserWalletUpdate = { type: "INIT" };
 
-    allUserWallets.forEach(w => userWalletsStore.set(w.address, { id: w.id, address: address(w.address) }));
-    allTokens.forEach(t => tokensStore.set(t.address, { // move to outer scope since its on load
+    return subsClient.push(userId, topic, msg);
+    // // TODO (A): probably dont need to actually do it because it need to pull FROM hot-cache ? redis : DB
+    // const allUserWallets = await sql`SELECT id, address FROM wallets w WHERE w.archived = false AND w.account_id = ${userId}`;
+    // const allTokens = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501'`;
+
+    // // allUserWallets.forEach(w => userWalletsStore.set(w.address, { id: w.id, address: address(w.address) }));
+    // allTokens.forEach(t => tokensStore.set(t.address, { // move to outer scope since its on load
+    //     tokenId: t.id,
+    //     chainId: t.chain_id,
+    //     mint: t.address,
+    //     symbol: t.symbol,
+    //     name: t.name,
+    //     decimals: t.decimals,
+    // }));
+
+
+    // allUserWallets.forEach(w => {
+    //     startTrackingSolanaAddress(w.address, makeWalletTxHandler(userId, topic))
+    //     userWalletsStore.set(w.address, { id: w.id, address: address(w.address) })
+    // })
+    // allUserWallets.forEach(w =>
+    //     startTrackingSolanaAddress(w.address, (txData: GetTranscationResult) => {
+    //         // const changes = parseTxBalancesChanges(txData);
+    //         // const walletTokenUpdates = await getWalletTokenUpdatesV2(changes, (tokenMint: Address) => addNewTokenToUserWallet(tokenMint) );
+
+    //         // const msg: UserWalletUpdate = {
+    //         //     type: "BALANCE_UPDATE",
+    //         //     chainId: "501",
+    //         //     data: walletTokenUpdates,
+    //         // }
+    //         // return subsClient.push(userId, topic, msg);
+    //     }));
+}
+
+export const makeWalletTxHandler = (userId: string, topic: string) =>
+    async (txData: GetTranscationResult) => {
+        const changes = parseTxBalancesChanges(txData);
+        const walletTokenUpdates = await getWalletTokenUpdatesV2(changes);
+        const msg: UserWalletUpdate = {
+            type: "BALANCE_UPDATE",
+            data: walletTokenUpdates,
+        }
+
+        return subsClient.push(userId, topic, msg);
+    }
+
+// adjust for scale later 
+export const startTrackingAllWallets = async () => {
+    const tokens = await sql`SELECT id, chain_id, address, symbol, name, decimals FROM tokens WHERE chain_id = '501'`;
+    tokens.forEach(t => tokensStore.set(t.address, {
         tokenId: t.id,
         chainId: t.chain_id,
         mint: t.address,
@@ -212,36 +254,12 @@ export const ackSubscribedUserWallets = async (userId: string, topic: string): P
         name: t.name,
         decimals: t.decimals,
     }));
-
-    // const allUserWalletTokens = await sql`
-    //     SELECT w.id as wallet_id, w.address as wallet_address,
-    //     COALESCE(json_agg(
-    //         json_build_object(
-    //             'token_id', t.id,
-    //             'chain_id', t.chain_id,
-    //             'token_address', t.address,
-    //             'symbol', t.symbol,
-    //             'name', t.name,
-    //             'decimals', t.decimals
-    //         )), '[]') as token_list
-    //     FROM wallets w
-    //     JOIN wallet_tokens wt ON wt.wallet_id = w.id
-    //     JOIN tokens t ON wt.token_id = t.id
-    //     WHERE w.account_id = ${userId}
-    //     AND w.archived = false
-    //     GROUP BY w.id, w.address
-    //     `;
-
-    allUserWallets.forEach(w => startTrackingSolanaAddress(w.address, async (txData: GetTranscationResult) => {
-        const changes = parseTxBalancesChanges(txData);
-        const walletTokenUpdates = await getWalletTokenUpdatesV2(changes, (tokenMint: Address) => addNewTokenToUserWallet(userId, w.address, tokenMint));
-
-        const msg: UserWalletUpdate = {
-            type: "BALANCE_UPDATE",
-            chainId: "501",
-            data: walletTokenUpdates,
-        }
-        return subsClient.push(userId, topic, msg);
-    }));
+    const wallets = await sql`SELECT id, address, account_id FROM wallets WHERE archived = false`;
+    wallets.forEach(w => {
+        startTrackingSolanaAddress(w.id, w.address, makeWalletTxHandler(w.account_id, WALLET_UPDATE_TOPIC));
+    });
 }
 
+// export const addWalletToTracking = async (userId: string, walletId: string, walletAdress: Address) => {
+//     walletStore.set(walletAdress, { id: walletId, address: walletAdress })
+// }

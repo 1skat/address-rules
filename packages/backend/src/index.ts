@@ -16,6 +16,8 @@ import txRouter from './transactions.js';
 import http from 'http';
 import { initWs } from './stream.js';
 import edgeRouter from './edges.js';
+import { startTrackingSolanaAddress, stopTrackingSolanaAddress } from './chain_listener.js';
+import { makeWalletTxHandler, startTrackingAllWallets, WALLET_UPDATE_TOPIC } from './socket/user_wallets.js';
 
 export const WEB_TOKEN_CONFIG = {
     accessExpMs: 30 * 60 * 1000,
@@ -185,13 +187,16 @@ app.post("/account/login-by-wallet/verify", async (req, res) => {
 });
 
 app.post("/wallets", authenticate, async (req, res) => {
+    const accId = req.user.sub;
     const { address, derivationIndex, alias, chainId, posX, posY } = req.body;
     try {
+
+        // todo: need type safety from psql/or make exportable handlers
         const wallet = await sql.begin(async sql => {
             const [newWallet] = await sql`
             INSERT INTO wallets (account_id, address, derivation_index, alias, chain_id, position_x, position_y)
             VALUES (
-            ${req.user.sub},
+            ${accId},
             ${address},
             ${derivationIndex},
             ${alias},
@@ -215,6 +220,7 @@ app.post("/wallets", authenticate, async (req, res) => {
 
             return newWallet;
         });
+        startTrackingSolanaAddress(wallet.id, wallet.address, makeWalletTxHandler(accId, WALLET_UPDATE_TOPIC));
 
         return res.status(201).json(wallet);
     } catch (err) {
@@ -237,9 +243,13 @@ app.post("/wallets/archive", authenticate, async (req, res) => {
     try {
         const { walletId } = req.body;
         if (!walletId) {
-            return res.status(400).json({ error: "cannot find wallet" });
+            return res.status(404).json({ error: "Not found" });
         }
-        await sql`UPDATE wallets SET archived = true WHERE id = ${walletId}`;
+        const [wallet] = await sql`UPDATE wallets SET archived = true WHERE id = ${walletId} RETURNING address`;
+        if (!wallet) {
+            return res.status(404).json({ error: "Not found" });
+        }
+        stopTrackingSolanaAddress(wallet.address);
 
         return res.status(200).end();
     } catch {
@@ -258,7 +268,6 @@ app.use((err, req, res, next) => {
 const server = http.createServer(app);
 
 initWs(server)
+await startTrackingAllWallets()
 server.listen(3000);
 console.log("Express server is running on port 3000")
-
-

@@ -243,11 +243,14 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
     });
 }
 
-type UserWalletUpdate = {
-    type: "BALANCE_UPDATE";
-    chainId: "501" | "60";
-    data: WalletTokenUpdates; // todo: it has to contian id but keep in mind that wallet-addresses could be unkown and are coming anywhere from chain
-}
+type UserWalletUpdate =
+    | {
+        type: "INIT";
+    }
+    | {
+        type: "BALANCE_UPDATE";
+        data: WalletTokenUpdates;
+    }
 type WalletTokenUpdates = Record<string, TokenUpdate[]>;
 type TokenUpdate = {
     isNewToken: boolean;
@@ -264,23 +267,22 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
     const route = "/wallets/subscribe-updates";
 
     const handler = (msg: UserWalletUpdate) => {
-        console.log("new msg", msg)
         switch (msg.type) {
-            case "SNAPSHOT": {
-                console.log("INIT:", msg);
+            case "INIT": {
+                console.log("subscribed succesfully to user wallets")
                 break;
             }
             case "BALANCE_UPDATE": {
                 const { data } = msg;
-                Object.entries(data).map(([walletId, tokenUpdates]) => {
+                console.log("update", msg);
+                for (const [walletId, tokenUpdates] of Object.entries(data)) {
                     for (const tu of tokenUpdates) {
                         if (tu.isNewToken) {
-                            useCanvasStore.getState().addNodeWalletToken(walletId, tu.tokenId, tu.tokenMeta)
+                            useCanvasStore.getState().addNodeWalletToken(walletId, tu.tokenId, tu.tokenMeta);
                         }
-                        useCanvasStore.getState().updateNodeWalletBalance(walletId, tu.tokenId, tu.balance)
-
+                        useCanvasStore.getState().updateNodeWalletBalance(walletId, tu.tokenId, tu.balance);
                     }
-                });
+                }
                 break;
             }
         }

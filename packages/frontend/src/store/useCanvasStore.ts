@@ -73,7 +73,7 @@ type CanvasStore = {
     removeEdge: (id: string) => void;
     setSelectedEdgeId: (edgeId: string | null) => void;
     setEdgeSelectedMint: (edgeId: string, tokenId: string) => void;
-    setNodeSelectedMint: (nodeId: string, tokenId: string) => void;
+    setNodeSelectedMint: (walletId: string, tokenId: string) => void;
     addEdgeToken: (edgeId: string, chainId: string, tokenMeta: TokenMeta) => void;
     removeEdgeToken: (edgeId: string, tokenId: string) => void;
     setEdges: (change: any) => void;
@@ -142,9 +142,9 @@ export const useCanvasStore = create<CanvasStore>()(
                     )
                 }))
             },
-            setNodeSelectedMint: (nodeId: string, tokenId: string) => {
+            setNodeSelectedMint: (walletId: string, tokenId: string) => {
                 set((s) => ({
-                    nodes: s.nodes.map((n) => n.id === nodeId
+                    nodes: s.nodes.map((n) => n.id === walletId
                         ? { ...n, data: { ...n.data, selectedTokenId: tokenId } }
                         : n,
                     )
