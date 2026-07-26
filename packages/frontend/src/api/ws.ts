@@ -20,18 +20,20 @@ type SocketResponseMsg =
         op: 2 | 9 | 5
         id: string,
         status: 400 | 401
-        error?: {
-            code: string,
-            message?: string
-        }
+        errData: any
+        // error?: {
+        //     code: string,
+        //     message?: string
+        // }
     } | {
         op: 7,
         id: string,
         status: 500,
-        error?: {
-            code: string,
-            message?: string
-        }
+        errData: any
+        // error?: {
+        //     code: string,
+        //     message?: string
+        // }
     }
 
 type WsType = {
@@ -116,16 +118,20 @@ export const connectWs = (token: string) => {
             case 5: {
                 if (msg.status === 200) {
                     const msgHandler = activeSubscriptions.get(msg.id); // callback msg handler
-                    if (msgHandler) msgHandler(msg.data);
+                    if (msgHandler) msgHandler(msg.data); // mgiht call it errData, but the actual type of errData should be handled inside handler
                 } else {
                     activeSubscriptions.delete(msg.id); // should probably try resubbing
                 }
+                break; // are you cleaning after handle?
+            }
+            case 7: {
+                console.log("ERROR MSG", msg)
+                const msgHandler = activeSubscriptions.get(msg.id)
+                activeSubscriptions.delete(msg.id)
+                if (msgHandler) msgHandler(msg.data);
+
                 break;
             }
-            case 7:
-                console.log("ERROR", msg.error)
-                activeSubscriptions.delete(msg.id)
-                break;
         }
     }
 }
@@ -176,7 +182,8 @@ type EdgeTokenData = {
     tokenMeta: TokenMeta;
     totalAmountInfo: {
         amount: StringifiedBigInt;
-        uiAmount: string;
+        decimals: number;
+        // uiAmount: string;
     }
 }
 
@@ -203,14 +210,16 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
         });
     }
     const handleMsg = (msg: OrderStatus) => {
+        console.log("Tx msg:", msg)
         switch (msg.status) {
             case "EXECUTING": {
                 console.log("tx executing")
                 const { data } = msg;
-                useCanvasStore.getState().updateEdgeTokenBalance(msg.edgeId, msg.tokenId, {
+                useCanvasStore.getState().updateEdgeTokenBalance(msg.edgeId, msg.tokenId, { // this updates the uiTotalAmount even if tx failed
                     state: "executing",
                     amount: data.totalAmountInfo.amount,
-                    uiAmount: data.totalAmountInfo.uiAmount,
+                    decimals: data.totalAmountInfo.decimals,
+                    // uiAmount: data.totalAmountInfo.uiAmount,
                 })
                 break;
             }
@@ -219,12 +228,16 @@ export const subscribeOrderStatus = async (orderId: string, edgeId: string, toke
                 useCanvasStore.getState().updateEdgeTokenBalance(msg.edgeId, msg.tokenId, {
                     state: "processed",
                     amount: data.totalAmountInfo.amount,
-                    uiAmount: data.totalAmountInfo.uiAmount,
+                    decimals: data.totalAmountInfo.decimals,
+                    // uiAmount: data.totalAmountInfo.uiAmoun
                 });
                 unsubscribe();
                 break;
             }
             case "EXECUTION_FAILED": {
+                // might fetch the actual uiTotalAmount from backend to sync and set the edge to it
+                // color edge in red
+                console.log("EXECUTION_FAILED", msg);
                 console.log("tx failed");
                 break;
             }
@@ -274,7 +287,6 @@ const subscribeUserWalletUpdates = async (): Promise<void> => {
             }
             case "BALANCE_UPDATE": {
                 const { data } = msg;
-                console.log("update", msg);
                 for (const [walletId, tokenUpdates] of Object.entries(data)) {
                     for (const tu of tokenUpdates) {
                         if (tu.isNewToken) {

@@ -2,33 +2,16 @@ import { Panel } from "@xyflow/react";
 import { useToolStore } from "../../store/useToolStore"
 import React, { useEffect, useRef, useState } from "react";
 import { useCanvasStore, type TokenEntryData, type TokenMeta, type TransactionEdge } from "../../store/useCanvasStore";
-import { toSmallestUnit, toUiAmount } from "../../lib/utils";
 import { buildSolanaTransaction, buildTransferInstruction } from "../../lib/transactions";
 import { deriveKeypair } from "../../lib/bip39";
 import { address, stringifiedBigInt } from "@solana/kit";
 import { AddressLabel } from "../AddressLabel";
 import { sendSolanaTransaction, subscribeOrderStatus } from "../../api/ws";
 import { tryCatchAsync } from "../../utils/try-catch";
+import { toSmallestUnit, toUiAmount } from "../../utils/utils";
+import { exampleUserPortfolioStore } from "../WalletNode";
 
 
-const exampleUserPortfolioStore: Record<string, TokenMeta> = {
-    "0b94bf38-b88c-4867-8957-7143e0d86235": {
-        tokenId: "0b94bf38-b88c-4867-8957-7143e0d86235",
-        chainId: "501",
-        mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-        symbol: "USDC",
-        name: "USDC",
-        decimals: 6,
-    },
-    "14ce98ee-5006-4bc7-a360-1ff1b826892f": {
-        tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
-        chainId: "501",
-        mint: "11111111111111111111111111111111",
-        symbol: "SOL",
-        name: "Solana",
-        decimals: 9,
-    }
-}
 
 export const SendSolanaTxCard = React.memo(() => {
     const activeTool = useToolStore(s => s.activeTool);
@@ -118,10 +101,11 @@ export const SendSolanaTxCard = React.memo(() => {
             setEdgeTokenPending(selectedEdge.id, selectedEdge.data.selectedTokenId); // set pending
             const [acceptedTx, acceptedTxErr] = await tryCatchAsync(() => sendSolanaTransaction(signedTx, selectedEdge.id, tokenId)); // returns pending + actual amounts
             if (acceptedTxErr) { // reset back to draft, but i losess the prev token entry data - fetch it from the backend or handle
+                console.log("failed,resetting: amount", amount);
+                const decimals = exampleUserPortfolioStore[selectedEdge.data.selectedTokenId].decimals;
                 setEdgeTokenDraftAmount(edgeId, tokenId, {
                     state: "draft",
-                    amount: selectedEdge.data.tokens[tokenId].totalAmount,
-                    uiAmount: selectedEdge.data.tokens[tokenId].uiTotalAmount,
+                    uiDraftAmount: toUiAmount(amount, decimals)
                 });
                 return setErr(acceptedTxErr);
             }
@@ -147,14 +131,14 @@ export const SendSolanaTxCard = React.memo(() => {
                         if (!decimals) return;
 
                         const val = toSmallestUnit(e.target.value, decimals);
-                        if (val) {
-                            setAmount(val);
-
+                        if (val !== null) {
+                            setAmount(val)
                             setEdgeTokenDraftAmount(selectedEdge.id, selectedEdge.data.selectedTokenId, {
                                 state: "draft",
-                                amount: stringifiedBigInt(val.toString()),
-                                uiAmount: toUiAmount(val, decimals)
-                            });
+                                uiDraftAmount: toUiAmount(val, decimals),
+                                // amount: stringifiedBigInt(val.toString()),
+                                // uiAmount: toUiAmount(val, decimals)
+                            })
                         }
                     }} />
                     <select value={selectedEdge.data?.selectedTokenId} onChange={(e) => handlerCurrencyChange(e.target.value)}>

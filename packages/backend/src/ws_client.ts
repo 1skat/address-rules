@@ -15,12 +15,12 @@ type SocketResponseMsg =
         op: 2 | 9 | 5;
         id: string;
         status: 400 | 401;
-        error?: SocketError;
+        errData: SocketError;
     } | {
         op: 7;
         id: string;
         status: 500;
-        error?: SocketError;
+        errData: SocketError;
     }
 
 const conns = new Map<string, Set<WebSocket>>();
@@ -86,7 +86,7 @@ export const subsClient = {
     //         }
     //     }
     // },
-    pushErrAndDrop: (userId: string, topic: string, error: any) => {
+    pushErrAndDrop: (userId: string, topic: string, errData: any) => {
         const userConns = conns.get(userId);
         if (!userConns) {
             return;
@@ -98,7 +98,7 @@ export const subsClient = {
 
             for (const [subId, subTopic] of userSubs) {
                 if (topic === subTopic) {
-                    pub(userId, { op: 7, id: subId, status: 500, error });
+                    pub(userId, { op: 7, id: subId, status: 500, errData });
 
                     userSubs.delete(subId)
                 }

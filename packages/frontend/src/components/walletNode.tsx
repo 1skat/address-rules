@@ -5,14 +5,14 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import SolLogo from "../assets/chains/solana.svg"
 import USDCLogo from "../assets/chains/usdc.svg"
 // import { useToolStore } from "../store/useToolStore";
-import { shortFormat } from "../lib/utils";
 import { useCanvasStore, type NodeWalletData, type TokenMeta } from "../store/useCanvasStore";
 import { memo } from "react";
+import { shortFormat } from "../utils/utils";
 // import { shortFormat } from "../lib/utils";
 
-const exampleUserPortfolioStore: Record<string, TokenMeta> = {
-    "0b94bf38-b88c-4867-8957-7143e0d86235": {
-        tokenId: "0b94bf38-b88c-4867-8957-7143e0d86235",
+export const exampleUserPortfolioStore: Record<string, TokenMeta> = {
+    "d473ea11-40d4-433c-8450-ea45152aff82": {
+        tokenId: "d473ea11-40d4-433c-8450-ea45152aff82",
         chainId: "501",
         mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
         symbol: "USDC",
@@ -20,8 +20,8 @@ const exampleUserPortfolioStore: Record<string, TokenMeta> = {
         decimals: 6,
         iconURI: USDCLogo,
     },
-    "14ce98ee-5006-4bc7-a360-1ff1b826892f": {
-        tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
+    "b5c3ff67-699c-4fb5-8544-ade0e09dbcea": {
+        tokenId: "b5c3ff67-699c-4fb5-8544-ade0e09dbcea",
         chainId: "501",
         mint: "11111111111111111111111111111111",
         symbol: "SOL",

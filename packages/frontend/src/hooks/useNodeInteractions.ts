@@ -32,11 +32,11 @@ export const useNodeInteraction = () => {
                 chainId: "501",
                 address: newWallet.address,
                 alias: newWallet.alias,
-                selectedTokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f", // default to native if not found
+                selectedTokenId: "b5c3ff67-699c-4fb5-8544-ade0e09dbcea", // default to native if not found
                 tokens: {
-                    ["14ce98ee-5006-4bc7-a360-1ff1b826892f"]: {
+                    ["b5c3ff67-699c-4fb5-8544-ade0e09dbcea"]: {
                         tokenMeta: {
-                            tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
+                            tokenId: "b5c3ff67-699c-4fb5-8544-ade0e09dbcea",
                             chainId: "501",
                             mint: "11111111111111111111111111111111",
                             symbol: "SOL",
@@ -46,9 +46,9 @@ export const useNodeInteraction = () => {
                         balanceAmount: stringifiedBigInt("0"),
                         uiBalanceAmount: "0",
                     },
-                    ["0b94bf38-b88c-4867-8957-7143e0d86235"]: {
+                    ["d473ea11-40d4-433c-8450-ea45152aff82"]: {
                         tokenMeta: {
-                            tokenId: "0b94bf38-b88c-4867-8957-7143e0d86235",
+                            tokenId: "d473ea11-40d4-433c-8450-ea45152aff82",
                             chainId: "501",
                             mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
                             symbol: "USDC",

@@ -34,14 +34,16 @@ type EdgeTokenData = {
     tokenMeta: TokenMeta;
     totalAmountInfo: {
         amount: StringifiedBigInt;
-        uiAmount: string;
+        decimals: number;
+        // uiAmount: string;
     }
 }
 
 export type OrderStatus =
     | { edgeId: string, tokenId: string, status: "EXECUTING", data: EdgeTokenData }
     | { edgeId: string, tokenId: string, status: "FILLED", data: EdgeTokenData }
-    | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
+    // | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", err: SocketError };
+    | { edgeId: string, tokenId: string, status: "EXECUTION_FAILED", errData: SocketError };
 
 
 const orderStatusStore = {
@@ -72,13 +74,14 @@ const orderStatusStore = {
 // helpers
 const setAndPushOrderStatus = (userId: string, orderId: string, os: OrderStatus): void => {
     orderStatusStore.set(orderId, os);
-    if (os.status === "EXECUTION_FAILED") return subsClient.pushErrAndDrop(userId, "order_status", os.err);
+    if (os.status === "EXECUTION_FAILED") return subsClient.pushErrAndDrop(userId, "order_status", os);
 
     return subsClient.push(userId, "order_status", os);
 }
 
 export const sendTransaction = async (userId: string, id: string, data: any) => {
     const { signedTx, edgeId, tokenId } = data;
+    console.log("edgeId", edgeId, "tokenId", tokenId);
     const orderId = crypto.randomUUID();
 
     if (!signedTx) {
@@ -86,7 +89,7 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
             op: 9,
             id,
             status: 400,
-            error: { code: "MISSING_TX" },
+            errData: { code: "MISSING_TX" },
         });
     }
 
@@ -106,7 +109,7 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
                 op: 9, // is it 9?
                 id,
                 status: 400,
-                error: { code: "MALFORMED_TX" },
+                errData: { code: "MALFORMED_TX" },
             });
         }
         const compiled = getCompiledTransactionMessageDecoder().decode(decodedWireTx.messageBytes);
@@ -116,7 +119,7 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
                 op: 9,
                 id,
                 status: 400,
-                error: { code: "MALFORMED_TX" },
+                errData: { code: "MALFORMED_TX" },
             });
         }
 
@@ -125,7 +128,7 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
                 op: 9,
                 id,
                 status: 400,
-                error: { code: "TOKEN_ID_NOT_FOUND" },
+                errData: { code: "TOKEN_ID_NOT_FOUND" },
             });
         }
         const sigBytes = fullTx.signatures[parsedTx.from]
@@ -142,7 +145,8 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
                 tokenMeta: parsedTx.tokenMeta, // dont need that, cuz the meta alreadt exists or the call is made
                 totalAmountInfo: {
                     amount: parsedTx.amountInfo.amount,
-                    uiAmount: parsedTx.amountInfo.uiAmount,
+                    decimals: parsedTx.amountInfo.decimals,
+                    // uiAmount: parsedTx.amountInfo.uiAmount,
                 }
             }
         }); // only send it here to avoid the reace condition
@@ -155,15 +159,13 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
         });
 
         await sql`
-        INSERT INTO transactions (order_id, edge_id, token_id, amount, ui_amount, fee_amount, ui_fee_amount, signature, status)
+        INSERT INTO transactions (order_id, edge_id, token_id, amount, fee_amount, signature, status)
         VALUES (
             ${orderId},
             ${edgeId},
             ${parsedTx.tokenMeta.tokenId},
             ${parsedTx.amountInfo.amount},
-            ${parsedTx.amountInfo.uiAmount},
             ${parsedTx.amountInfo.feeAmount},
-            ${parsedTx.amountInfo.uiFeeAmount},
             ${parsedTx.signature},
             'EXECUTING'
             )
@@ -173,9 +175,10 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
         const [, txErr] = await tryCatchAsync(() => sendAndConfirmSolanaTransaction(fullTx, { commitment: "confirmed" }));
 
         if (txErr) {
+            console.error(txErr)
             const errCode = isSolanaError(txErr, SOLANA_ERROR__BLOCK_HEIGHT_EXCEEDED) ? "BLOCKHASH_EXPIRED" : "TX_FAILED";
             await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
-            return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: errCode } });
+            return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", errData: { code: errCode } });
         }
 
         const totalAmount: string = await sql.begin(async sql => {
@@ -202,13 +205,15 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
                 tokenMeta: parsedTx.tokenMeta, // dont need that, cuz the meta alreadt exists or the call is made
                 totalAmountInfo: {
                     amount: stringifiedBigInt(totalAmount),
-                    uiAmount: toUiAmount(BigInt(totalAmount), parsedTx.tokenMeta.decimals),
+                    decimals: parsedTx.amountInfo.decimals,
+                    // uiAmount: toUiAmount(BigInt(totalAmount), parsedTx.tokenMeta.decimals),
                 }
             }
         });
     } catch (err) {
+        console.error(err)
         await sql`UPDATE transactions SET status = 'EXECUTION_FAILED' WHERE order_id = ${orderId}`;
-        return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", err: { code: "TX_FAILED" } });
+        return setAndPushOrderStatus(userId, orderId, { edgeId, tokenId, status: "EXECUTION_FAILED", errData: { code: "TX_FAILED" } });
     }
 }
 
@@ -333,7 +338,7 @@ export const sendTransaction = async (userId: string, id: string, data: any) => 
 // }
 
 export const ackSubscribedOrderStatus = async (userId: string, topic: string, payload: any) => {
-    const { orderId, edgeId } = payload;
+    const { orderId, edgeId, tokenId } = payload;
     const status = orderStatusStore.get(orderId);
 
     if (status) {
@@ -342,7 +347,7 @@ export const ackSubscribedOrderStatus = async (userId: string, topic: string, pa
         }
         return subsClient.push(userId, topic, status);
     }
-    const orderStatus: OrderStatus = { edgeId, status: "EXECUTION_FAILED", err: { code: "ORDER_STATUS_NOT_FOUND" } };
+    const orderStatus: OrderStatus = { edgeId, tokenId, status: "EXECUTION_FAILED", data: { code: "ORDER_STATUS_NOT_FOUND" } };
     return subsClient.pushErrAndDrop(userId, topic, orderStatus);
 }
 
@@ -351,7 +356,11 @@ type ParsedTransaction = {
     to: Address;
     tokenMeta: TokenMeta,
     amountInfo: {
-        amount: StringifiedBigInt, uiAmount: string, feeAmount: StringifiedBigInt, uiFeeAmount: string;
+        amount: StringifiedBigInt,
+        // uiAmount: string,
+        feeAmount: StringifiedBigInt,
+        decimals: number;
+        // uiFeeAmount: string;
     };
     signature: Signature;
 }
@@ -365,11 +374,12 @@ const parseTransfer = async (ctm: CompiledTransactionMessage): Promise<ParsedTra
         if (!handler) continue
 
         const parsedTx = await handler(message.instructions);
+        console.log("parsedTx", parsedTx);
         if (!parsedTx) return null
 
         console.log(inspect(parsedTx, { depth: null }))
         parsedTx.amountInfo.feeAmount = stringifiedBigInt((5000n * BigInt(ctm.header.numSignerAccounts)).toString());
-        parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(ctm.header.numSignerAccounts), 9);
+        // parsedTx.amountInfo.uiFeeAmount = toUiAmount(5000n * BigInt(ctm.header.numSignerAccounts), 9);
 
         return parsedTx;
     }
@@ -404,7 +414,8 @@ async function handleSystemTransfer(ixs: Instruction[]) {
         },
         amountInfo: {
             amount: stringifiedBigInt(parsed.data.amount.toString()),
-            uiAmount: (Number(parsed.data.amount) / 10 ** 9).toString(),
+            decimals: 9
+            // uiAmount: (Number(parsed.data.amount) / 10 ** 9).toString(),
         }
     }
 }
@@ -439,7 +450,8 @@ async function handleTokenTransferChecked(ixs: Instruction[]) {
             },
             amountInfo: {
                 amount: stringifiedBigInt(amountInfo.amount.toString()),
-                uiAmount: (Number(amountInfo.amount) / 10 ** amountInfo.decimals).toString(),
+                // uiAmount: (Number(amountInfo.amount) / 10 ** amountInfo.decimals).toString(),
+                decimals: amountInfo.decimals,
             }
         }
     }

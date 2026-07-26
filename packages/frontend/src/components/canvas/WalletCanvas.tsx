@@ -12,7 +12,7 @@ import { useNodeInteraction } from '../../hooks/useNodeInteractions';
 import { useEdgeInteraction } from '../../hooks/useEdgeInteractions';
 import { SendSolanaTxCard } from './SendTxCard';
 import { SettingsCard } from './SettingsCard';
-import { throttle } from '../../utils/throttle';
+import { throttle } from '../../utils/utils';
 
 export const WalletCanvas = () => {
     return (

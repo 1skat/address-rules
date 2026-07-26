@@ -55,10 +55,10 @@ CREATE TABLE transactions (
     order_id UUID PRIMARY KEY,
     edge_id UUID NOT NULl REFERENCES edges(id) ON DELETE RESTRICT, -- prevent removing txs on edge delete
     token_id UUID NOT NULL REFERENCES tokens(id),
-    amount NUMERIC(78) NOT NULL,
-    ui_amount TEXT NOT NULL,
+    amount NUMERIC(78) NOT NULL, -- need to make sure SUM() works correctly
+    -- ui_amount TEXT NOT NULL,
     fee_amount NUMERIC(78) NOT NULL,
-    ui_fee_amount TEXT NOT NULL,
+    -- ui_fee_amount TEXT NOT NULL,
     signature TEXT NOT NULL,
     status tx_status NOT NULL DEFAULT 'EXECUTING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()

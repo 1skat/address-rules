@@ -52,12 +52,12 @@ export const useEdgeInteraction = () => {
     const addConnectionEdge = async (connection: Connection) => {
         const txEdge: EdgeTransactionDataV3 = {
             chainId: "501",
-            selectedTokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f", // cache in localstorage or index db
+            selectedTokenId: "b5c3ff67-699c-4fb5-8544-ade0e09dbcea", // cache in localstorage or index db
             tokens: {
-                ["14ce98ee-5006-4bc7-a360-1ff1b826892f"]: {
+                ["b5c3ff67-699c-4fb5-8544-ade0e09dbcea"]: {
                     state: "draft",
                     tokenMeta: {
-                        tokenId: "14ce98ee-5006-4bc7-a360-1ff1b826892f",
+                        tokenId: "b5c3ff67-699c-4fb5-8544-ade0e09dbcea",
                         chainId: "501",
                         mint: "11111111111111111111111111111111",
                         symbol: "SOL",

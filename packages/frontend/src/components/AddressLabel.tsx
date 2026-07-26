@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { shortFormat } from "../lib/utils";
+import { shortFormat } from "../utils/utils";
 
 export const AddressLabel = ({ address }: { address: string }) => {
     const [show, setShow] = useState(false);

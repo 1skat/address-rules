@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOnbordingStore } from "../store/onboardingStore";
-import { generateIndecies } from "../lib/utils";
+import { generateIndecies } from "../utils/utils";
 
 export const MnemonicVerifier = () => {
     const [userInput, setUserInput] = useState("");

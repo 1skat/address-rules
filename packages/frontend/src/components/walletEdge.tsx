@@ -51,6 +51,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
         ? getSpecialPath({ sourceX, sourceY, targetX, targetY }, sourceX < targetX ? 35 : -35)
         : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
 
+    console.log(tokenData.uiDraftAmount, tokenData.uiTotalAmount)
     return (
         <>
             <BaseEdge
@@ -70,7 +71,7 @@ export const WalletEdge = memo(({ sourceX, sourceY, sourcePosition, targetPositi
                     }}
                     className="nodrag nopan cursor-pointer px-2 py-1"
                 >
-                    <span>{tokenData.uiTotalAmount} {tokenData.tokenMeta.symbol}</span >
+                    <span>{tokenData.uiDraftAmount ?? tokenData.uiTotalAmount} {tokenData.tokenMeta.symbol}</span >
                 </div>
             </EdgeLabelRenderer>
         </>

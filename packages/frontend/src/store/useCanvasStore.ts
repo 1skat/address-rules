@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { addEdge, applyEdgeChanges, applyNodeChanges, reconnectEdge as rfReconnectEdge, type Connection, type Edge, type Node } from "@xyflow/react"
 import { stringifiedBigInt, type StringifiedBigInt } from "@solana/kit";
+import { toUiAmount, toUiAmountV2 } from "../utils/utils";
 
 export type TransactionState = "draft" | "pending" | "executing" | "processed";
 
@@ -18,8 +19,15 @@ export type TokenMeta = {
 export type TokenEntryData = {
     state: TransactionState;
     tokenMeta: TokenMeta;
+    uiTotalAmount: string; // set from backend
+    uiDraftAmount?: string; // set client side, fallback to uiTotal
+}
+
+export type TokenEntryDataV1 = {
+    state: TransactionState;
+    tokenMeta: TokenMeta;
     totalAmount: StringifiedBigInt;
-    uiTotalAmount: string;
+    uiTotalAmount: string
 }
 
 export type EdgeTransactionDataV3 = {
@@ -53,14 +61,16 @@ export type BalanceData = {
 
 export type BalanceUpdateData = {
     state: "executing" | "processed";
-    amount: StringifiedBigInt;
-    uiAmount: string;
+    amount: StringifiedBigInt; // from backend
+    decimals: number;
+    // uiAmount: string;
 }
 
 export type DraftAmountData = {
     state: "draft";
-    amount: StringifiedBigInt;
-    uiAmount: string;
+    uiDraftAmount: string; // from client
+    // amount: StringifiedBigInt;
+    // uiAmount: string;
 }
 
 type CanvasStore = {
@@ -194,7 +204,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 }))
             },
             updateEdgeTokenBalance: (edgeId: string, tokenId: string, data: BalanceUpdateData) => {
-                const { state, amount, uiAmount } = data;
+                const { state, amount, decimals } = data;
                 set((s) => ({
                     edges: s.edges.map((e) => {
                         if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
@@ -206,7 +216,7 @@ export const useCanvasStore = create<CanvasStore>()(
                                 tokens: {
                                     ...e.data.tokens,
                                     [tokenId]: {
-                                        ...e.data.tokens[tokenId], totalAmount: amount, uiTotalAmount: uiAmount, state: state
+                                        ...e.data.tokens[tokenId], uiTotalAmount: toUiAmountV2(amount, decimals), state,
                                     }
                                 }
                             }
@@ -215,7 +225,7 @@ export const useCanvasStore = create<CanvasStore>()(
                 }))
             },
             setEdgeTokenDraftAmount: (edgeId: string, tokenId: string, data: DraftAmountData) => {
-                const { state, amount, uiAmount } = data;
+                const { state, uiDraftAmount } = data;
                 set((s) => ({
                     edges: s.edges.map((e) => {
                         if (e.id !== edgeId || !e.data || !e.data.tokens[tokenId]) return e;
@@ -227,7 +237,7 @@ export const useCanvasStore = create<CanvasStore>()(
                                 tokens: {
                                     ...e.data.tokens,
                                     [tokenId]: {
-                                        ...e.data.tokens[tokenId], totalAmount: amount, uiTotalAmount: uiAmount, state: state
+                                        ...e.data.tokens[tokenId], uiDraftAmount, state,
                                     }
                                 }
                             }
@@ -275,7 +285,7 @@ export const useCanvasStore = create<CanvasStore>()(
                                 ...e.data,
                                 tokens: {
                                     ...e.data.tokens, [tokenId]: {
-                                        tokenMeta, state: "draft", totalAmount: stringifiedBigInt("0"), uiTotalAmount: "0"
+                                        tokenMeta, state: "draft", uiTotalAmount: "0",
                                     }
                                 }
                             }
@@ -303,7 +313,22 @@ export const useCanvasStore = create<CanvasStore>()(
         }),
         {
             name: "canvas-store",
-            partialize: (s) => ({ nodes: s.nodes, edges: s.edges })
+            partialize: (s) => ({
+                nodes: s.nodes,
+                edges: s.edges.map(e => ({
+                    ...e, data: {
+                        ...e.data,
+                        tokens: Object.fromEntries(
+                            Object.entries(e.data.tokens).map(([id, entry]) => [id, {
+                                state: entry.state,
+                                tokenMeta: entry.tokenMeta,
+                                uiTotalAmount: entry.uiTotalAmount,
+                                /*excluding uiDraftAmount*/
+                            }])
+                        ),
+                    }
+                })),
+            }),
         }
     ),
 );

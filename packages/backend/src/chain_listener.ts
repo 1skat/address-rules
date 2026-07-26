@@ -16,7 +16,7 @@ export const handleSignature = async (signature: Signature) => { // todo: make h
 
 export const startTrackingSolanaAddress = async (wId: string, wAddress: string, dataHandler: (txData: GetTranscationResult) => Promise<void>) => {
     console.log("start tracking", wAddress)
-    const walletAddress = address(wAddress); // can fail catch errs
+    const walletAddress = address(wAddress);
     if (walletStore.has(walletAddress)) return;
 
     const controller = new AbortController();
